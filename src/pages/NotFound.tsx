@@ -1,26 +1,40 @@
 import { motion } from "framer-motion";
+import { ArrowLeft, Scissors } from "lucide-react";
+import { Link } from "react-router";
+import { Button } from "@/components/ui/button";
 
 export default function NotFound() {
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
-      className="min-h-screen flex flex-col"
-    >
-
-      
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col items-center justify-center">
-        <div className="max-w-5xl mx-auto relative px-4">
-          <div className="flex items-center justify-center min-h-[200px]">
-            <div className="text-center">
-              <h1 className="text-4xl font-bold text-gray-900 mb-4">404</h1>
-              <p className="text-lg text-gray-600">Page Not Found</p>
-            </div>
-          </div>
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4">
+      <div className="aurora" />
+      <motion.div
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="glass relative z-10 w-full max-w-lg rounded-3xl p-8 text-center"
+      >
+        <span className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
+          <Scissors className="size-5" />
+        </span>
+        <p className="mt-6 text-5xl font-semibold tracking-tight text-foreground">404</p>
+        <h1 className="mt-2 text-xl font-semibold tracking-tight text-foreground">
+          Essa página não existe
+        </h1>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          O endereço acessado não corresponde a nenhuma rota do BarberFlow OS. Talvez o link
+          esteja com dígito trocado.
+        </p>
+        <div className="mt-6 flex flex-col items-center justify-center gap-2 sm:flex-row">
+          <Button asChild>
+            <Link to="/app">
+              <ArrowLeft className="size-4" /> Ir para o painel
+            </Link>
+          </Button>
+          <Button asChild variant="outline" className="bg-white/60">
+            <Link to="/">Voltar ao site</Link>
+          </Button>
         </div>
-      </div>
-    </motion.div>
+      </motion.div>
+    </div>
   );
 }

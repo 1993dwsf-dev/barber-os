@@ -1,25 +1,50 @@
-import '@vly-ai/integrations';
+import "@vly-ai/integrations";
 import { Toaster } from "@/components/ui/sonner";
 import { RequireAuth } from "@/components/RequireAuth";
+import { RequireOrg } from "@/components/RequireOrg";
+import { AppShell } from "@/components/AppShell";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
 import React, { StrictMode, useEffect, lazy, Suspense } from "react";
+import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Route, Routes, useLocation } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import "./index.css";
+import { OrgProvider } from "@/lib/org-context";
 
-// Lazy load route components for better code splitting
 const Landing = lazy(() => import("./pages/Landing.tsx"));
 const AuthPage = lazy(() => import("./pages/Auth.tsx"));
+const Onboarding = lazy(() => import("./pages/Onboarding.tsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
+const Agenda = lazy(() => import("./pages/Agenda.tsx"));
+const Clientes = lazy(() => import("./pages/Clientes.tsx"));
+const ClienteDetalhe = lazy(() => import("./pages/ClienteDetalhe.tsx"));
+const Equipe = lazy(() => import("./pages/Equipe.tsx"));
+const BarbeiroDetalhe = lazy(() => import("./pages/BarbeiroDetalhe.tsx"));
+const Servicos = lazy(() => import("./pages/Servicos.tsx"));
+const Pacotes = lazy(() => import("./pages/Pacotes.tsx"));
+const Assinaturas = lazy(() => import("./pages/Assinaturas.tsx"));
+const Produtos = lazy(() => import("./pages/Produtos.tsx"));
+const Estoque = lazy(() => import("./pages/Estoque.tsx"));
+const Pdv = lazy(() => import("./pages/Pdv.tsx"));
+const Caixa = lazy(() => import("./pages/Caixa.tsx"));
+const Despesas = lazy(() => import("./pages/Despesas.tsx"));
+const Comissoes = lazy(() => import("./pages/Comissoes.tsx"));
+const Fidelidade = lazy(() => import("./pages/Fidelidade.tsx"));
+const Relacionamento = lazy(() => import("./pages/Relacionamento.tsx"));
+const Relatorios = lazy(() => import("./pages/Relatorios.tsx"));
+const Configuracoes = lazy(() => import("./pages/Configuracoes.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 // Simple loading fallback for route transitions
 function RouteLoading() {
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-pulse text-muted-foreground">Loading...</div>
+    <div className="flex min-h-screen items-center justify-center">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <span className="size-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+        Carregando…
+      </div>
     </div>
   );
 }
@@ -61,14 +86,12 @@ class RootErrorBoundary extends React.Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-background text-foreground p-6">
+        <div className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
           <div className="max-w-lg text-center">
             <p className="text-sm font-semibold">Preview runtime error</p>
-            <p className="mt-2 text-xs text-muted-foreground break-words">
-              {this.state.message}
-            </p>
+            <p className="mt-2 text-xs break-words text-muted-foreground">{this.state.message}</p>
             {this.state.stack && (
-              <pre className="mt-3 text-left text-[10px] leading-4 text-muted-foreground/80 max-h-40 overflow-auto rounded border border-border/60 p-2">
+              <pre className="mt-3 max-h-40 overflow-auto rounded border border-border/60 p-2 text-left text-[10px] leading-4 text-muted-foreground/80">
                 {this.state.stack}
               </pre>
             )}
@@ -81,8 +104,6 @@ class RootErrorBoundary extends React.Component<
 }
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
-
-
 
 function RouteSyncer() {
   const location = useLocation();
@@ -107,6 +128,18 @@ function RouteSyncer() {
   return null;
 }
 
+/** Rota autenticada: exige sessão + unidade ativa e monta o shell do app. */
+function Protected({ children }: { children: ReactNode }) {
+  return (
+    <RequireAuth>
+      <OrgProvider>
+        <RequireOrg>
+          <AppShell>{children}</AppShell>
+        </RequireOrg>
+      </OrgProvider>
+    </RequireAuth>
+  );
+}
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -122,16 +155,43 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/" element={<Landing />} />
               <Route
                 path="/auth"
-                element={<AuthPage redirectAfterAuth="/dashboard" />}
+                element={<AuthPage redirectAfterAuth="/app" />}
               />
               <Route
-                path="/dashboard"
+                path="/onboarding"
                 element={
-                  <RequireAuth>
-                    <Dashboard />
+                  <RequireAuth
+                    title="Crie sua barbearia para continuar"
+                    description="Você precisa de uma unidade para acessar o BarberFlow OS."
+                  >
+                    <OrgProvider>
+                      <Onboarding />
+                    </OrgProvider>
                   </RequireAuth>
                 }
               />
+
+              <Route path="/dashboard" element={<Navigate to="/app" replace />} />
+              <Route path="/app" element={<Protected><Dashboard /></Protected>} />
+              <Route path="/app/agenda" element={<Protected><Agenda /></Protected>} />
+              <Route path="/app/pdv" element={<Protected><Pdv /></Protected>} />
+              <Route path="/app/caixa" element={<Protected><Caixa /></Protected>} />
+              <Route path="/app/clientes" element={<Protected><Clientes /></Protected>} />
+              <Route path="/app/clientes/:id" element={<Protected><ClienteDetalhe /></Protected>} />
+              <Route path="/app/relacionamento" element={<Protected><Relacionamento /></Protected>} />
+              <Route path="/app/fidelidade" element={<Protected><Fidelidade /></Protected>} />
+              <Route path="/app/equipe" element={<Protected><Equipe /></Protected>} />
+              <Route path="/app/barbeiros/:id" element={<Protected><BarbeiroDetalhe /></Protected>} />
+              <Route path="/app/servicos" element={<Protected><Servicos /></Protected>} />
+              <Route path="/app/pacotes" element={<Protected><Pacotes /></Protected>} />
+              <Route path="/app/assinaturas" element={<Protected><Assinaturas /></Protected>} />
+              <Route path="/app/produtos" element={<Protected><Produtos /></Protected>} />
+              <Route path="/app/estoque" element={<Protected><Estoque /></Protected>} />
+              <Route path="/app/despesas" element={<Protected><Despesas /></Protected>} />
+              <Route path="/app/comissoes" element={<Protected><Comissoes /></Protected>} />
+              <Route path="/app/relatorios" element={<Protected><Relatorios /></Protected>} />
+              <Route path="/app/configuracoes" element={<Protected><Configuracoes /></Protected>} />
+
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

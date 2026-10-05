@@ -7,6 +7,7 @@ import type { Doc } from "./_generated/dataModel";
 import {
   audit,
   bad,
+  requireManage,
   requireMember,
   requireOwner,
   requireUserId,
@@ -441,12 +442,20 @@ export async function wipeOrgData(
   ctx: MutationCtx,
   organizationId: string,
 ): Promise<void> {
+  type Queryable = {
+    query(table: string): {
+      withIndex(
+        name: string,
+        filter: (q: { eq: (field: string, value: string) => unknown }) => unknown,
+      ): { collect(): Promise<Array<{ _id: string }>> };
+    };
+  };
+  const db = ctx.db as unknown as Queryable;
   for (const table of ORG_TABLES) {
-    const docs = await (ctx.db.query(table as never) as never)
-      .withIndex("by_org" as never, (q: { eq: (f: never, v: never) => never }) =>
-        q.eq("organizationId" as never, organizationId as never),
-      )
+    const rows = await db
+      .query(table)
+      .withIndex("by_org", (q) => q.eq("organizationId", organizationId))
       .collect();
-    for (const d of docs) await ctx.db.delete((d as { _id: Id<"organizations"> })._id);
+    for (const row of rows) await ctx.db.delete(row._id as Id<"organizations">);
   }
 }

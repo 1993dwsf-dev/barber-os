@@ -160,7 +160,7 @@ export function resolveCommission(
     rule = { model: org.settings.defaultCommissionModel, value: org.settings.defaultCommissionValue };
   if (rule.model === "herdar" || rule.value === undefined || rule.value === null)
     rule = { model: "percentual", value: 40 };
-  return { model: rule.model as "percentual" | "fixo", value: rule.value };
+  return { model: rule.model as "percentual" | "fixo", value: rule.value as number };
 }
 
 export function commissionAmount(

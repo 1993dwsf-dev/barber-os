@@ -1,38 +1,32 @@
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   InputOTP,
   InputOTPGroup,
   InputOTPSlot,
 } from "@/components/ui/input-otp";
-
 import { useAuth } from "@/hooks/use-auth";
-import logo from "@/assets/logo.svg";
-import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, Mail, Scissors, Sparkles, UserX } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 
 interface AuthProps {
   redirectAfterAuth?: string;
 }
 
-function resolveRedirectAfterAuth(
-  returnTo: string | null,
-  fallback = "/dashboard",
-) {
+function resolveRedirectAfterAuth(returnTo: string | null, fallback = "/dashboard") {
   if (returnTo?.startsWith("/") && !returnTo.startsWith("//")) {
     return returnTo;
   }
   return fallback;
 }
+
+const HIGHLIGHTS = [
+  "Agenda com bloqueio de horário e lista de espera",
+  "PDV com pagamento dividido e baixa automática de estoque",
+  "Comissões, caixa e fidelidades atualizados no atendimento",
+  "Relatórios com exportação em CSV",
+];
 
 function Auth({ redirectAfterAuth }: AuthProps = {}) {
   const { isLoading: authLoading, isAuthenticated, signIn } = useAuth();
@@ -52,6 +46,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       navigate(redirect);
     }
   }, [authLoading, isAuthenticated, navigate, redirect]);
+
   const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
@@ -60,14 +55,14 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       const formData = new FormData(event.currentTarget);
       await signIn("email-otp", formData);
       setStep({ email: formData.get("email") as string });
-      setIsLoading(false);
-    } catch (error) {
-      console.error("Email sign-in error:", error);
+    } catch (err) {
+      console.error("Email sign-in error:", err);
       setError(
-        error instanceof Error
-          ? error.message
-          : "Failed to send verification code. Please try again.",
+        err instanceof Error
+          ? err.message
+          : "Não foi possível enviar o código. Tente novamente.",
       );
+    } finally {
       setIsLoading(false);
     }
   };
@@ -79,17 +74,13 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     try {
       const formData = new FormData(event.currentTarget);
       await signIn("email-otp", formData);
-
-      console.log("signed in");
-
       navigate(redirect);
-    } catch (error) {
-      console.error("OTP verification error:", error);
-
-      setError("The verification code you entered is incorrect.");
-      setIsLoading(false);
-
+    } catch (err) {
+      console.error("OTP verification error:", err);
+      setError("O código digitado não confere. Confira e tente novamente.");
       setOtp("");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -97,199 +88,197 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     setIsLoading(true);
     setError(null);
     try {
-      console.log("Attempting anonymous sign in...");
       await signIn("anonymous");
-      console.log("Anonymous sign in successful");
       navigate(redirect);
-    } catch (error) {
-      console.error("Guest login error:", error);
-      console.error("Error details:", JSON.stringify(error, null, 2));
-      setError(`Failed to sign in as guest: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } catch (err) {
+      console.error("Guest login error:", err);
+      setError(
+        `Não foi possível entrar como visitante: ${
+          err instanceof Error ? err.message : "erro desconhecido"
+        }`,
+      );
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
+      <div className="aurora" />
 
-      
-      {/* Auth Content */}
-      <div className="flex-1 flex items-center justify-center">
-        <div className="flex items-center justify-center h-full flex-col">
-        <Card className="min-w-[350px] pb-0 border shadow-md">
+      <div className="relative z-10 grid w-full max-w-5xl gap-4 lg:grid-cols-[1.1fr_1fr] lg:items-center">
+        {/* Painel de apresentação */}
+        <aside className="hidden flex-col gap-6 rounded-3xl glass p-8 lg:flex">
+          <Link to="/" className="flex items-center gap-2.5">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+              <Scissors className="size-5" />
+            </span>
+            <span>
+              <span className="block text-base font-semibold tracking-tight text-foreground">
+                BarberFlow <span className="text-primary">OS</span>
+              </span>
+              <span className="block text-[11px] text-muted-foreground">
+                Sistema operacional para barbearias
+              </span>
+            </span>
+          </Link>
+          <h1 className="text-3xl font-semibold leading-tight tracking-tight text-foreground">
+            Sua barbearia em um só lugar
+          </h1>
+          <ul className="flex flex-col gap-3">
+            {HIGHLIGHTS.map((h) => (
+              <li key={h} className="flex items-start gap-2.5 text-sm text-muted-foreground">
+                <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" />
+                {h}
+              </li>
+            ))}
+          </ul>
+          <p className="glass-chip mt-auto rounded-2xl p-4 text-xs leading-relaxed text-muted-foreground">
+            Entrando com qualquer e-mail, você cria sua própria barbearia — ou entra como
+            visitante para conhecer o ambiente demo com dados de exemplo.
+          </p>
+        </aside>
+
+        {/* Formulário */}
+        <main className="glass rounded-3xl p-6 sm:p-8">
+          <Link
+            to="/"
+            className="mb-6 inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="size-3.5" /> Voltar ao site
+          </Link>
+
           {step === "signIn" ? (
             <>
-              <CardHeader className="text-center">
-              <div className="flex justify-center">
-                    <img
-                      src={logo}
-                      alt="Lock Icon"
-                      width={64}
-                      height={64}
-                      className="rounded-lg mb-4 mt-4 cursor-pointer"
-                      onClick={() => navigate("/")}
+              <div className="lg:hidden">
+                <span className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+                  <Scissors className="size-5" />
+                </span>
+              </div>
+              <h2 className="mt-4 text-xl font-semibold tracking-tight text-foreground lg:mt-0">
+                Entre na sua barbearia
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Enviamos um código de 6 dígitos para o seu e-mail. Sem senha para lembrar.
+              </p>
+
+              <form onSubmit={handleEmailSubmit} className="mt-6">
+                <label htmlFor="auth-email" className="text-xs font-medium text-foreground">
+                  E-mail
+                </label>
+                <div className="mt-1.5 flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      id="auth-email"
+                      name="email"
+                      placeholder="voce@barbearia.com.br"
+                      type="email"
+                      className="glass-input pl-9"
+                      disabled={isLoading}
+                      required
                     />
                   </div>
-                <CardTitle className="text-xl">Get Started</CardTitle>
-                <CardDescription>
-                  Enter your email to log in or sign up
-                </CardDescription>
-              </CardHeader>
-              <form onSubmit={handleEmailSubmit}>
-                <CardContent>
-                  
-                  <div className="relative flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        name="email"
-                        placeholder="name@example.com"
-                        type="email"
-                        className="pl-9"
-                        disabled={isLoading}
-                        required
-                      />
-                    </div>
-                    <Button
-                      type="submit"
-                      variant="outline"
-                      size="icon"
-                      disabled={isLoading}
-                    >
-                      {isLoading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <ArrowRight className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                  {error && (
-                    <p className="mt-2 text-sm text-red-500">{error}</p>
-                  )}
-                  
-                  <div className="mt-4">
-                    <div className="relative">
-                      <div className="absolute inset-0 flex items-center">
-                        <span className="w-full border-t" />
-                      </div>
-                      <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-background px-2 text-muted-foreground">
-                          Or
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full mt-4"
-                      onClick={handleGuestLogin}
-                      disabled={isLoading}
-                    >
-                      <UserX className="mr-2 h-4 w-4" />
-                      Continue as Guest
-                    </Button>
-                  </div>
-                </CardContent>
+                  <Button type="submit" size="icon" disabled={isLoading} aria-label="Enviar código">
+                    {isLoading ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <ArrowRight className="size-4" />
+                    )}
+                  </Button>
+                </div>
+
+                {error ? (
+                  <p className="mt-3 rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-600">
+                    {error}
+                  </p>
+                ) : null}
+
+                <div className="my-5 flex items-center gap-3">
+                  <span className="h-px flex-1 bg-border" />
+                  <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    ou
+                  </span>
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full bg-white/60"
+                  onClick={handleGuestLogin}
+                  disabled={isLoading}
+                >
+                  <UserX className="size-4" />
+                  Entrar como visitante (ambiente demo)
+                </Button>
               </form>
             </>
           ) : (
             <>
-              <CardHeader className="text-center mt-4">
-                <CardTitle>Check your email</CardTitle>
-                <CardDescription>
-                  We've sent a code to {step.email}
-                </CardDescription>
-              </CardHeader>
-              <form onSubmit={handleOtpSubmit}>
-                <CardContent className="pb-4">
-                  <input type="hidden" name="email" value={step.email} />
-                  <input type="hidden" name="code" value={otp} />
-
-                  <div className="flex justify-center">
-                    <InputOTP
-                      value={otp}
-                      onChange={setOtp}
-                      maxLength={6}
-                      disabled={isLoading}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && otp.length === 6 && !isLoading) {
-                          // Find the closest form and submit it
-                          const form = (e.target as HTMLElement).closest("form");
-                          if (form) {
-                            form.requestSubmit();
-                          }
-                        }
-                      }}
-                    >
-                      <InputOTPGroup>
-                        {Array.from({ length: 6 }).map((_, index) => (
-                          <InputOTPSlot key={index} index={index} />
-                        ))}
-                      </InputOTPGroup>
-                    </InputOTP>
-                  </div>
-                  {error && (
-                    <p className="mt-2 text-sm text-red-500 text-center">
-                      {error}
-                    </p>
-                  )}
-                  <p className="text-sm text-muted-foreground text-center mt-4">
-                    Didn't receive a code?{" "}
-                    <Button
-                      variant="link"
-                      className="p-0 h-auto"
-                      onClick={() => setStep("signIn")}
-                    >
-                      Try again
-                    </Button>
-                  </p>
-                </CardContent>
-                <CardFooter className="flex-col gap-2">
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={isLoading || otp.length !== 6}
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Verifying...
-                      </>
-                    ) : (
-                      <>
-                        Verify code
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => setStep("signIn")}
+              <h2 className="text-xl font-semibold tracking-tight text-foreground">
+                Confira seu e-mail
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Enviamos o código de acesso para <strong>{step.email}</strong>.
+              </p>
+              <form onSubmit={handleOtpSubmit} className="mt-6">
+                <input type="hidden" name="email" value={step.email} />
+                <input type="hidden" name="code" value={otp} />
+                <div className="flex justify-center">
+                  <InputOTP
+                    value={otp}
+                    onChange={setOtp}
+                    maxLength={6}
                     disabled={isLoading}
-                    className="w-full"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && otp.length === 6 && !isLoading) {
+                        (e.target as HTMLElement).closest("form")?.requestSubmit();
+                      }
+                    }}
                   >
-                    Use different email
-                  </Button>
-                </CardFooter>
+                    <InputOTPGroup>
+                      {Array.from({ length: 6 }).map((_, index) => (
+                        <InputOTPSlot key={index} index={index} />
+                      ))}
+                    </InputOTPGroup>
+                  </InputOTP>
+                </div>
+
+                {error ? (
+                  <p className="mt-3 rounded-xl bg-rose-500/10 px-3 py-2 text-center text-xs text-rose-600">
+                    {error}
+                  </p>
+                ) : null}
+
+                <Button
+                  type="submit"
+                  className="mt-6 w-full"
+                  disabled={isLoading || otp.length !== 6}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" /> Verificando…
+                    </>
+                  ) : (
+                    <>
+                      Verificar código
+                      <ArrowRight className="size-4" />
+                    </>
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="mt-2 w-full"
+                  onClick={() => setStep("signIn")}
+                  disabled={isLoading}
+                >
+                  Usar outro e-mail
+                </Button>
               </form>
             </>
           )}
-
-          <div className="py-4 px-6 text-xs text-center text-muted-foreground bg-muted border-t rounded-b-lg">
-            Secured by{" "}
-            <a
-              href="https://freebuff.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-primary transition-colors"
-            >
-              freebuff.com
-            </a>
-          </div>
-        </Card>
-        </div>
+        </main>
       </div>
     </div>
   );

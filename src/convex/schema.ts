@@ -154,7 +154,12 @@ const schema = defineSchema(
       color: v.optional(v.string()),
       createdAt: v.number(),
       updatedAt: v.number(),
-    }).index("by_org", ["organizationId"]),
+    })
+      .index("by_org", ["organizationId"])
+      .searchIndex("search_name", {
+        searchField: "name",
+        filterFields: ["organizationId"],
+      }),
 
     /* ------------------------------ catálogo ------------------------------ */
 
@@ -475,7 +480,8 @@ const schema = defineSchema(
     })
       .index("by_org_barber", ["organizationId", "barberId"])
       .index("by_org_status", ["organizationId", "status"])
-      .index("by_org_date", ["organizationId", "date"]),
+      .index("by_org_date", ["organizationId", "date"])
+      .index("by_sale", ["saleId"]),
 
     /* ------------------------------ fidelidade ------------------------------ */
 
