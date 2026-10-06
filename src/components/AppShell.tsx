@@ -19,13 +19,11 @@ import {
   Percent,
   Plus,
   Receipt,
-  Repeat,
   Scissors,
   Search,
   Settings,
   ShoppingBag,
   Sparkles,
-  Star,
   TrendingUp,
   Users,
   UsersRound,
@@ -75,8 +73,6 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: "Relacionamento",
     items: [
       { to: "/app/clientes", label: "Clientes", icon: Users, cap: "clients" },
-      { to: "/app/relacionamento", label: "Follow-ups", icon: Repeat, cap: "crm_done" },
-      { to: "/app/fidelidade", label: "Fidelidade", icon: Star, cap: "loyalty_done" },
     ],
   },
   {
@@ -89,8 +85,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { to: "/app/servicos", label: "Serviços", icon: Scissors, cap: "catalog" },
       { to: "/app/pacotes", label: "Pacotes", icon: Package, cap: "packages" },
       { to: "/app/assinaturas", label: "Assinaturas", icon: CreditCard, cap: "memberships" },
-      { to: "/app/produtos", label: "Produtos", icon: Boxes, cap: "products" },
-      { to: "/app/estoque", label: "Estoque", icon: Package, cap: "inventory" },
+      { to: "/app/produtos", label: "Produtos e estoque", icon: Boxes, cap: "products" },
     ],
   },
   {

@@ -26,13 +26,10 @@ const Servicos = lazy(() => import("./pages/Servicos.tsx"));
 const Pacotes = lazy(() => import("./pages/Pacotes.tsx"));
 const Assinaturas = lazy(() => import("./pages/Assinaturas.tsx"));
 const Produtos = lazy(() => import("./pages/Produtos.tsx"));
-const Estoque = lazy(() => import("./pages/Estoque.tsx"));
 const Pdv = lazy(() => import("./pages/Pdv.tsx"));
 const Caixa = lazy(() => import("./pages/Caixa.tsx"));
 const Despesas = lazy(() => import("./pages/Despesas.tsx"));
 const Comissoes = lazy(() => import("./pages/Comissoes.tsx"));
-const Fidelidade = lazy(() => import("./pages/Fidelidade.tsx"));
-const Relacionamento = lazy(() => import("./pages/Relacionamento.tsx"));
 const Relatorios = lazy(() => import("./pages/Relatorios.tsx"));
 const Configuracoes = lazy(() => import("./pages/Configuracoes.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
@@ -178,15 +175,15 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/app/caixa" element={<Protected><Caixa /></Protected>} />
               <Route path="/app/clientes" element={<Protected><Clientes /></Protected>} />
               <Route path="/app/clientes/:id" element={<Protected><ClienteDetalhe /></Protected>} />
-              <Route path="/app/relacionamento" element={<Protected><Relacionamento /></Protected>} />
-              <Route path="/app/fidelidade" element={<Protected><Fidelidade /></Protected>} />
+              <Route path="/app/relacionamento" element={<Navigate to="/app/clientes" replace />} />
+              <Route path="/app/fidelidade" element={<Navigate to="/app" replace />} />
               <Route path="/app/equipe" element={<Protected><Equipe /></Protected>} />
               <Route path="/app/barbeiros/:id" element={<Protected><BarbeiroDetalhe /></Protected>} />
               <Route path="/app/servicos" element={<Protected><Servicos /></Protected>} />
               <Route path="/app/pacotes" element={<Protected><Pacotes /></Protected>} />
               <Route path="/app/assinaturas" element={<Protected><Assinaturas /></Protected>} />
               <Route path="/app/produtos" element={<Protected><Produtos /></Protected>} />
-              <Route path="/app/estoque" element={<Protected><Estoque /></Protected>} />
+              <Route path="/app/estoque" element={<Navigate to="/app/produtos" replace />} />
               <Route path="/app/despesas" element={<Protected><Despesas /></Protected>} />
               <Route path="/app/comissoes" element={<Protected><Comissoes /></Protected>} />
               <Route path="/app/relatorios" element={<Protected><Relatorios /></Protected>} />

@@ -6,6 +6,7 @@ import {
   Clock,
   Copy,
   History,
+  Info,
   KeyRound,
   RefreshCw,
   Save,
@@ -239,7 +240,7 @@ function BusinessHoursForm({
         hint="A agenda só permite agendamentos dentro destas faixas"
         action={
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Clock className="size-3.5" /> Fuso de Brasília
+            <Clock className="size-3.5" /> Fuso horário: (UTC/GMT -04:00) America/Manaus
           </span>
         }
       />
@@ -321,7 +322,7 @@ function SettingsForm({ orgId, editable }: { orgId: Id<"organizations">; editabl
       <section className="glass-chip rounded-2xl p-5">
         <SectionTitle
           title="Comissões padrão"
-          hint="Aplicadas quando o serviço ou barbeiro usa “herdar”"
+          hint="Regra de comissão usada por padrão na unidade"
           action={<Settings2 className="size-4 text-muted-foreground" />}
         />
         <div className="grid gap-3 sm:grid-cols-3">
@@ -372,6 +373,17 @@ function SettingsForm({ orgId, editable }: { orgId: Id<"organizations">; editabl
             />
           </div>
         </div>
+        <p className="mt-3 flex items-start gap-2 rounded-xl bg-white/55 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+          <Info className="mt-0.5 size-3.5 shrink-0 text-primary" />
+          <span>
+            <strong className="font-semibold text-foreground">Como funciona o “Herdar”:</strong>{" "}
+            cada serviço e cada barbeiro pode ter a própria comissão ou escolher “Herdar” para
+            aproveitar a regra do nível acima. O serviço herdado usa a comissão do barbeiro; se o
+            barbeiro também estiver como “Herdar”, vale a regra padrão definida aqui. Isso evita
+            repetir o mesmo percentual em cada cadastro: mude só esta regra e toda a equipe que
+            “herda” acompanha automaticamente.
+          </span>
+        </p>
       </section>
 
       <section className="glass-chip rounded-2xl p-5">

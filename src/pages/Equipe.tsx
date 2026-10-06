@@ -373,6 +373,11 @@ function BarberDialog({
                   <SelectItem value="fixo">Valor fixo</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                {model === "herdar"
+                  ? "Herdar usa a comissão padrão definida em Configurações › Regras."
+                  : "Regra própria deste barbeiro, sobre os serviços que ele atende."}
+              </p>
             </div>
             <div>
               <Label>

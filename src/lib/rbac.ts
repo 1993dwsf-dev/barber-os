@@ -37,8 +37,6 @@ export const CAPS = [
   "audit",
   "settings",
   "demo",
-  "loyalty_done",
-  "crm_done",
 ] as const;
 export type Cap = (typeof CAPS)[number];
 

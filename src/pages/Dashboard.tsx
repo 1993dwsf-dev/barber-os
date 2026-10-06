@@ -295,9 +295,9 @@ export default function Dashboard() {
             title="Precisa de atenção"
             hint="Gerado a partir dos registros atuais"
             action={
-              canEdit("crm") ? (
+              canEdit("clients") ? (
                 <Button asChild variant="ghost" size="sm">
-                  <Link to="/app/relacionamento">Abrir CRM</Link>
+                  <Link to="/app/clientes">Abrir clientes</Link>
                 </Button>
               ) : null
             }
@@ -669,7 +669,7 @@ export default function Dashboard() {
             hint={`${k.lowStockCount} item(ns)`}
             action={
               <Button asChild variant="ghost" size="sm">
-                <Link to="/app/estoque">Repor</Link>
+                <Link to="/app/produtos">Repor</Link>
               </Button>
             }
           />

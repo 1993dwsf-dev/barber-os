@@ -282,7 +282,7 @@ function MovementDialog({
           <DialogTitle>Nova movimentação</DialogTitle>
           <DialogDescription>
             Compras somam ao estoque; ajustes e correções aplicam a quantidade informada
-            (use valor negativo paraReducer).
+            (use valor negativo para dar baixa).
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">

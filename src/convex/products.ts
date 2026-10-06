@@ -1,15 +1,15 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { audit, bad, notify, requireManage, requireView } from "./lib";
+import { todayISO } from "../lib/dates";
 
+/** Gera um código interno de produto quando o gestor não informa um. */
 function autoSku(name: string): string {
   const base = name.trim().toUpperCase().slice(0, 10).replace(/[^A-Z0-9]/g, "_");
   const rnd = Math.random().toString(36).slice(2, 5).toUpperCase();
   return `${base}_${rnd}`;
 }
-
-import type { Id } from "./_generated/dataModel";
-import { audit, bad, notify, requireManage, requireView } from "./lib";
-import { todayISO } from "../lib/dates";
 
 /* ------------------------------ consultas ------------------------------ */
 

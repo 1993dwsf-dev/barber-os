@@ -345,6 +345,11 @@ function ServiceDialog({
                   <SelectItem value="fixo">Valor fixo</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                {model === "herdar"
+                  ? "Herdar usa a comissão do barbeiro que atende; se ele também herdar, vale a regra padrão da barbearia."
+                  : "Regra própria deste serviço, aplicada a todos os barbeiros."}
+              </p>
             </div>
             <div>
               <Label>{model === "percentual" ? "Percentual" : "Valor (R$)"}</Label>

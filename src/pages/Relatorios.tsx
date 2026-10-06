@@ -523,7 +523,7 @@ export default function Relatorios() {
                       "estoque",
                       ["SKU", "Produto", "Categoria", "Estoque", "Mínimo", "Custo", "Venda", "Margem %"],
                       bundle.inventory.map((p) => [
-                        p.sku,
+                        p.sku ?? "",
                         p.name,
                         p.category,
                         p.stock,
