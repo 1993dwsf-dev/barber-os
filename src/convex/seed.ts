@@ -1,4 +1,4 @@
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import {
   awardLoyalty,
@@ -112,15 +112,18 @@ export async function seedDemoData(
   const pastDays = 45;
 
   /* --------------------------- equipe --------------------------- */
+  // Mantemos os documentos em memória: o seed gera centenas de vendas e cada
+  // `ctx.db.get` extra conta como leitura de índice na mesma transação.
   const barberIds: Array<Id<"barbers">> = [];
+  const barberDocs = new Map<Id<"barbers">, Doc<"barbers">>();
   for (const b of BARBERS) {
-    const id = await ctx.db.insert("barbers", {
+    const payload = {
       organizationId,
       name: b.name,
       jobTitle: b.jobTitle,
       phone: b.phone,
       email: `${b.name.split(" ")[0].toLowerCase()}@navalhadeouro.demo`,
-      status: "ativo",
+      status: "ativo" as const,
       hireDate: addDaysISO(today, -rint(400, 1200)),
       commissionModel: b.model,
       commissionValue: b.value,
@@ -133,26 +136,31 @@ export async function seedDemoData(
       color: b.color,
       createdAt: now,
       updatedAt: now,
-    });
+    };
+    const id = await ctx.db.insert("barbers", payload);
     barberIds.push(id);
+    barberDocs.set(id, { _id: id, _creationTime: now, ...payload });
   }
 
   /* --------------------------- serviços --------------------------- */
   const serviceIds: Id<"services">[] = [];
+  const serviceDocs = new Map<Id<"services">, Doc<"services">>();
   for (const s of SERVICES) {
-    const id = await ctx.db.insert("services", {
+    const payload = {
       organizationId,
       category: s.category,
       name: s.name,
       description: undefined,
       durationMin: s.duration,
       priceCents: s.price,
-      commissionModel: "herdar",
+      commissionModel: "herdar" as const,
       active: true,
       createdAt: now,
       updatedAt: now,
-    });
+    };
+    const id = await ctx.db.insert("services", payload);
     serviceIds.push(id);
+    serviceDocs.set(id, { _id: id, _creationTime: now, ...payload });
   }
   const svc = (i: number) => ({ id: serviceIds[i], ...SERVICES[i] });
 
@@ -278,6 +286,12 @@ export async function seedDemoData(
     planIds.push(id);
   }
 
+  // Totais de caixa acumulados em memória: o seed relia os movimentos de cada
+  // sessão no fim do dia (um scan por dia de operação dentro da transação).
+  const cashInBySession = new Map<Id<"cashSessions">, number>();
+  const cashOutBySession = new Map<Id<"cashSessions">, number>();
+  const sessionByDate = new Map<string, Id<"cashSessions">>();
+
   /* --------------------------- caixa: sessão aberta hoje --------------------------- */
   const todaySessionId = await ctx.db.insert("cashSessions", {
     organizationId,
@@ -287,6 +301,7 @@ export async function seedDemoData(
     status: "aberto",
     openedBy: responsible,
   });
+  sessionByDate.set(today, todaySessionId);
 
   /* --------------------------- vendas / comissões / fidelidade --------------------------- */
   let saleNumber = org.salesCount;
@@ -386,39 +401,31 @@ export async function seedDemoData(
         }
       }
       if (item.kind === "servico" && item.barberId) {
-        const barber = await ctx.db.get(item.barberId);
-        const service = item.serviceId ? await ctx.db.get(item.serviceId) : undefined;
+        // Docs vêm de mapas já carregados; um `db.get` por item de venda
+        // estourava o orçamento de leituras da transação do seed.
+        const barber = barberDocs.get(item.barberId);
+        const service = item.serviceId ? serviceDocs.get(item.serviceId) : undefined;
         if (barber) {
-          const rule = resolveCommission(barber, service ?? undefined, org);
+          const rule = resolveCommission(barber, service, org);
           const calc = commissionAmount(rule, item.unit * item.qty, item.qty);
-          const existing = await ctx.db
-            .query("commissions")
-            .withIndex("by_org_barber", (q) =>
-              q.eq("organizationId", organizationId).eq("barberId", barber._id),
-            )
-            .filter(
-              (q) =>
-                q.eq(q.field("saleId"), saleId) &&
-                q.eq(q.field("description"), item.name),
-            )
-            .first();
-          if (!existing) {
-            await ctx.db.insert("commissions", {
-              organizationId,
-              barberId: barber._id,
-              saleId,
-              appointmentId: args.appointmentId,
-              serviceId: item.serviceId,
-              description: item.name,
-              date: args.date,
-              model: calc.model,
-              ratePercent: calc.ratePercent,
-              baseCents: item.unit * item.qty,
-              amountCents: calc.amount,
-              status: "pendente",
-              createdAt: now,
-            });
-          }
+          // Cada venda recebe um saleId novo, então não há duplicata a verificar.
+          // O scan de deduplicação anterior lia a coleção de comissões inteira
+          // do barbeiro a cada item e estourava os limites da transação.
+          await ctx.db.insert("commissions", {
+            organizationId,
+            barberId: barber._id,
+            saleId,
+            appointmentId: args.appointmentId,
+            serviceId: item.serviceId,
+            description: item.name,
+            date: args.date,
+            model: calc.model,
+            ratePercent: calc.ratePercent,
+            baseCents: item.unit * item.qty,
+            amountCents: calc.amount,
+            status: "pendente",
+            createdAt: now,
+          });
         }
       }
     }
@@ -443,6 +450,10 @@ export async function seedDemoData(
           saleId,
           createdAt: now,
         });
+        cashInBySession.set(
+          args.sessionId,
+          (cashInBySession.get(args.sessionId) ?? 0) + moneyDue,
+        );
       }
     }
     if (args.clientId) {
@@ -754,9 +765,10 @@ export async function seedDemoData(
       status: "aberto",
       openedBy: responsible,
     });
+    sessionByDate.set(date, sessionId);
     // caixa do dia é fechado no fim com os movimentos gerados pelas vendas
     for (const barberId of barberIds) {
-      const count = rint(2, 5);
+      const count = rint(2, 4);
       let cursor = HOURS[wd].start;
       for (let k = 0; k < count; k++) {
         const dur = 30 + rint(0, 3) * 10;
@@ -789,15 +801,10 @@ export async function seedDemoData(
         userId: responsible,
         createdAt: now,
       });
+      cashOutBySession.set(sessionId, (cashOutBySession.get(sessionId) ?? 0) + amount);
     }
-    const cashIn = await ctx.db
-      .query("cashMovements")
-      .withIndex("by_session", (q) => q.eq("sessionId", sessionId))
-      .collect();
-    const cashSales = cashIn
-      .filter((m) => m.type === "venda")
-      .reduce((s, m) => s + m.amountCents, 0);
-    const outs = cashIn.filter((m) => m.type !== "venda").reduce((s, m) => s + m.amountCents, 0);
+    const cashSales = cashInBySession.get(sessionId) ?? 0;
+    const outs = cashOutBySession.get(sessionId) ?? 0;
     const expected = 20000 + cashSales - outs;
     const variance = rnd() < 0.3 ? rint(-1500, 1500) : 0;
     await ctx.db.patch(sessionId, {
@@ -914,15 +921,13 @@ export async function seedDemoData(
         createdAt: now,
       });
       if (e.method === "dinheiro") {
-        const session = await ctx.db
-          .query("cashSessions")
-          .withIndex("by_org", (q) => q.eq("organizationId", organizationId))
-          .filter((q) => q.eq(q.field("openedDate"), date))
-          .first();
-        if (session) {
+        // Mapa em memória: antes isso varria todas as sessões de caixa da
+        // organização em cada despesa (dezenas de scans dentro da transação).
+        const sessionId = sessionByDate.get(date);
+        if (sessionId) {
           await ctx.db.insert("cashMovements", {
             organizationId,
-            sessionId: session._id,
+            sessionId,
             type: "despesa",
             amountCents: amount,
             description: e.description,

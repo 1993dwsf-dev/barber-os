@@ -377,6 +377,19 @@ function OrgSwitcher() {
   const navigate = useNavigate();
   const { signOut } = useAuth();
 
+  function handleSignOut() {
+    // Sai da área logada imediatamente e limpa a sessão em seguida, para não
+    // piscar telas de "sem unidade" no meio da transição de autenticação.
+    navigate("/");
+    try {
+      window.localStorage.removeItem("barberflow:org");
+    } catch {
+      // localStorage pode estar indisponível em iframes restritos.
+    }
+    // `signOut` já ignora erros internos; o catch evita rejeição não tratada.
+    void signOut().catch(() => {});
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -433,12 +446,7 @@ function OrgSwitcher() {
           </>
         ) : null}
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onSelect={() => {
-            void signOut();
-            navigate("/");
-          }}
-        >
+        <DropdownMenuItem onSelect={() => void handleSignOut()}>
           <LogOut className="size-4" /> Sair da conta
         </DropdownMenuItem>
       </DropdownMenuContent>

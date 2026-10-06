@@ -13,6 +13,7 @@ import {
   requireUserId,
 } from "./lib";
 import { APP_ROLES, type AppRole } from "../lib/rbac";
+import { seedDemoData } from "./seed";
 
 export const DEFAULT_SERVICE_CATEGORIES = ["Cabelo", "Barba", "Combo", "Química", "Estética"];
 export const DEFAULT_PRODUCT_CATEGORIES = ["Pomadas", "Óleos", "Shampoos", "Barba", "Acessórios"];
@@ -386,12 +387,11 @@ export const enterDemoMode = mutation({
 export const seedDemo = internalMutation({
   args: { organizationId: v.id("organizations") },
   handler: async (ctx, { organizationId }) => {
-    const { seedDemoData } = await import("./seed");
-    const memberships = await ctx.db
+    const membership = await ctx.db
       .query("organizationMembers")
       .withIndex("by_org", (q) => q.eq("organizationId", organizationId))
-      .collect();
-    await seedDemoData(ctx, organizationId, memberships[0]?.userId);
+      .first();
+    await seedDemoData(ctx, organizationId, membership?.userId);
   },
 });
 

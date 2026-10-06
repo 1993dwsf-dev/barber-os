@@ -134,7 +134,9 @@ const schema = defineSchema(
       body: v.string(),
       userId: v.id("users"),
       createdAt: v.number(),
-    }).index("by_client", ["clientId"]),
+    })
+      .index("by_org", ["organizationId"])
+      .index("by_client", ["clientId"]),
 
     /* ------------------------------ equipe ------------------------------ */
 
@@ -269,6 +271,7 @@ const schema = defineSchema(
       createdAt: v.number(),
       updatedAt: v.number(),
     })
+      .index("by_org", ["organizationId"])
       .index("by_org_date", ["organizationId", "date"])
       .index("by_org_barber_date", ["organizationId", "barberId", "date"])
       .index("by_org_client", ["organizationId", "clientId"])
@@ -359,6 +362,7 @@ const schema = defineSchema(
       notes: v.optional(v.string()),
       createdBy: v.id("users"),
     })
+      .index("by_org", ["organizationId"])
       .index("by_org_date", ["organizationId", "date"])
       .index("by_org_client", ["organizationId", "clientId"])
       .index("by_org_barber", ["organizationId", "barberId"]),
@@ -396,6 +400,7 @@ const schema = defineSchema(
       date: v.string(),
       createdAt: v.number(),
     })
+      .index("by_org", ["organizationId"])
       .index("by_sale", ["saleId"])
       .index("by_org_date", ["organizationId", "date"]),
 
@@ -478,6 +483,7 @@ const schema = defineSchema(
       paidDate: v.optional(v.string()),
       createdAt: v.number(),
     })
+      .index("by_org", ["organizationId"])
       .index("by_org_barber", ["organizationId", "barberId"])
       .index("by_org_status", ["organizationId", "status"])
       .index("by_org_date", ["organizationId", "date"])
@@ -548,6 +554,7 @@ const schema = defineSchema(
       completedAt: v.optional(v.number()),
       createdAt: v.number(),
     })
+      .index("by_org", ["organizationId"])
       .index("by_org_status", ["organizationId", "status"])
       .index("by_org_due", ["organizationId", "dueDate"])
       .index("by_org_client", ["organizationId", "clientId"]),
@@ -582,6 +589,7 @@ const schema = defineSchema(
       snoozedUntil: v.optional(v.number()),
       createdAt: v.number(),
     })
+      .index("by_org", ["organizationId"])
       .index("by_org_status", ["organizationId", "status"])
       .index("by_org_dedup", ["organizationId", "dedupKey"]),
 

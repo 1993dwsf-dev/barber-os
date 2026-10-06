@@ -327,57 +327,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Depoimentos */}
-      <section className="relative z-10 px-4 py-10 sm:px-6">
-        <div className="mx-auto max-w-6xl">
-          <SectionLabel>Quem usa</SectionLabel>
-          <div className="grid gap-4 lg:grid-cols-3">
-            {[
-              {
-                quote:
-                  "Antes eu fechava o caixa no caderno e ainda chorava no fechamento. Hoje o número do dia aparece antes de eu perguntar.",
-                name: "Rafael Menezes",
-                role: "Dono — Navalha & Fade, Vila Mariana",
-              },
-              {
-                quote:
-                  "A agenda parou de dar conflito de horário depois que todos passaram a marcar por lá. Emenda de cliente virou fichinha.",
-                name: "Juliana Prado",
-                role: "Gerente — Studio Prado, São Paulo",
-              },
-              {
-                quote:
-                  "Comissão de barbeiro sempre foi briga no fim do mês. Com aprovação por período e extrato por barbeiro, ninguém questiona mais.",
-                name: "Cleiton Andrade",
-                role: "Sócio — Barbearia Azulão",
-              },
-            ].map((t, i) => (
-              <motion.figure
-                key={t.name}
-                initial={{ opacity: 0, y: 18 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.08 }}
-                className="glass glass-interactive flex flex-col gap-4 rounded-2xl p-6"
-              >
-                <div className="flex gap-0.5 text-amber-500">
-                  {Array.from({ length: 5 }).map((_, s) => (
-                    <Star key={s} className="size-3.5 fill-current" />
-                  ))}
-                </div>
-                <blockquote className="text-sm leading-relaxed text-foreground/85">
-                  “{t.quote}”
-                </blockquote>
-                <figcaption className="mt-auto">
-                  <p className="text-sm font-semibold text-foreground">{t.name}</p>
-                  <p className="text-xs text-muted-foreground">{t.role}</p>
-                </figcaption>
-              </motion.figure>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* Como começar */}
       <section id="comecar" className="relative z-10 px-4 py-10 sm:px-6">
         <div className="mx-auto max-w-6xl">

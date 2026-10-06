@@ -1,12 +1,29 @@
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { useQuery } from "convex/react";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { canManage, canView } from "@/lib/rbac";
 import type { AppRole, Cap } from "@/lib/rbac";
 
 const STORAGE_KEY = "barberflow:org";
+
+/** localStorage pode lançar em iframes restritos — nunca deve derrubar o app. */
+function readStoredOrg(): string | null {
+  try {
+    return typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredOrg(id: string): void {
+  try {
+    if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEY, id);
+  } catch {
+    // ignora
+  }
+}
 
 export type OrgMembership = {
   org: Doc<"organizations">;
@@ -33,7 +50,7 @@ const OrgContext = createContext<OrgContextValue | null>(null);
 
 export function OrgProvider({ children }: { children: ReactNode }) {
   const memberships = useQuery(api.orgs.myOrganizations);
-  const [orgId, setOrgId] = useState<Id<"organizations"> | null>(null);
+  const [selected, setSelected] = useState<Id<"organizations"> | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const list = useMemo<OrgMembership[]>(
@@ -41,25 +58,21 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     [memberships],
   );
 
-  // Escolhe a unidade salva, ou a primeira disponível.
-  useEffect(() => {
-    if (!memberships) return;
-    if (list.length === 0) {
-      setOrgId(null);
-      return;
-    }
-    setOrgId((current) => {
-      if (current && list.some((m) => m.org._id === current)) return current;
-      const stored =
-        typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
-      const match = stored ? list.find((m) => m.org._id === stored) : undefined;
-      return match ? match.org._id : list[0].org._id;
-    });
-  }, [memberships, list]);
+  // A unidade ativa é derivada de forma síncrona, já no mesmo render em que as
+  // memberships chegam. Antes isso era feito num useEffect, então o primeiro
+  // render já "pronto" tinha orgId nulo e o RequireOrg jogava o usuário no
+  // onboarding toda vez que o provider montava (login, criar barbearia, etc.).
+  const orgId = useMemo<Id<"organizations"> | null>(() => {
+    if (!memberships || list.length === 0) return null;
+    if (selected && list.some((m) => m.org._id === selected)) return selected;
+    const stored = readStoredOrg();
+    const match = stored ? list.find((m) => m.org._id === stored) : undefined;
+    return (match ?? list[0]).org._id;
+  }, [memberships, list, selected]);
 
   const select = useCallback((id: string) => {
-    setOrgId(id as Id<"organizations">);
-    if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEY, id);
+    setSelected(id as Id<"organizations">);
+    writeStoredOrg(id);
   }, []);
 
   const active = list.find((m) => m.org._id === orgId) ?? null;

@@ -78,7 +78,11 @@ const cmp = (a: unknown, b: unknown): number => {
 
 const indexFields = (table: string, index: string): string[] => {
   const t = (schema as any).tables[table];
-  const idx = t?.indexes?.[index];
+  const raw = t?.indexes;
+  // O schema expõe `indexes` como um array de `{ indexDescriptor, fields }`.
+  const idx = Array.isArray(raw)
+    ? raw.find((i: any) => i?.indexDescriptor === index)
+    : raw?.[index];
   if (!idx) throw new Error(`índice desconhecido ${table}.${index}`);
   return idx.fields as string[];
 };
@@ -243,7 +247,10 @@ row("documents scanned", stats.documentsScanned, LIMITS.documentsScanned);
 row("index ranges read", stats.indexRangesRead, LIMITS.indexRangesRead);
 row("data written (MiB)", +(stats.dataWrittenBytes / 1024 / 1024).toFixed(2), LIMITS.dataWrittenBytes / 1024 / 1024);
 row("data read (MiB)", +(stats.dataReadBytes / 1024 / 1024).toFixed(2), LIMITS.dataReadBytes / 1024 / 1024);
-row("operações de IO", stats.ioOps, 1000);
+// O limite da Convex é de 1.000 operações de IO *concorrentes* por função, não
+// do total. O seed é sequencial (nunca passa de 1 leitura em voo), então este
+// número é apenas informativo.
+console.log(`total de operações de banco (informativo): ${stats.ioOps}`);
 
 console.log("\n-- escritas por tabela --");
 for (const [t, c] of top(stats.writesByTable)) console.log(`  ${t.padEnd(28)} ${c}`);
@@ -257,5 +264,4 @@ for (const [t, c] of top(stats.readsByTable)) console.log(`  ${t.padEnd(34)} ${c
 const failures = (Object.keys(LIMITS) as Array<keyof typeof LIMITS>).filter(
   (k) => stats[k] > LIMITS[k],
 );
-if (stats.ioOps > 1000) failures.push("ioOps");
 console.log(failures.length ? `\nLIMITE EXCEDIDO: ${failures.join(", ")}` : "\nTodos os limites respeitados.");

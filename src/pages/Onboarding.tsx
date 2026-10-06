@@ -85,6 +85,17 @@ export default function Onboarding() {
     }
   }
 
+  function handleSignOut() {
+    // Volta para o site primeiro; a sessão é limpa em seguida.
+    navigate("/");
+    try {
+      window.localStorage.removeItem("barberflow:org");
+    } catch {
+      // localStorage pode estar bloqueado em iframes restritos.
+    }
+    void signOut().catch(() => {});
+  }
+
   async function handleDemo() {
     setBusy(true);
     setError(null);
@@ -295,10 +306,7 @@ export default function Onboarding() {
           <div className="mt-8 border-t pt-4 text-center">
             <button
               type="button"
-              onClick={() => {
-                void signOut();
-                navigate("/");
-              }}
+              onClick={() => void handleSignOut()}
               className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
             >
               Sair da conta

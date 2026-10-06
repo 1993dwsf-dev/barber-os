@@ -23,8 +23,8 @@ import { Navigate, useLocation, useNavigate } from "react-router";
  */
 export function RequireAuth({
   children,
-  title = "Sign in to continue",
-  description = "This page is only available to signed-in users.",
+  title = "Entre para continuar",
+  description = "Esta página é exclusiva para usuários conectados.",
   redirectImmediately = false,
 }: {
   children: ReactNode;
@@ -68,18 +68,18 @@ export function RequireAuth({
             <CardDescription>{description}</CardDescription>
           </CardHeader>
           <CardContent className="text-center text-sm text-muted-foreground">
-            You'll come straight back to this page once you're signed in.
+            Você volta direto para esta página assim que entrar.
           </CardContent>
           <CardFooter className="flex flex-col gap-2">
             <Button className="w-full" onClick={() => navigate(signInHref)}>
-              Sign in
+              Entrar
             </Button>
             <Button
               variant="ghost"
               className="w-full"
               onClick={() => navigate("/")}
             >
-              Back to home
+              Voltar ao site
             </Button>
           </CardFooter>
         </Card>
