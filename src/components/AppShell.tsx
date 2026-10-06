@@ -75,8 +75,8 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: "Relacionamento",
     items: [
       { to: "/app/clientes", label: "Clientes", icon: Users, cap: "clients" },
-      { to: "/app/relacionamento", label: "Follow-ups", icon: Repeat, cap: "crm" },
-      { to: "/app/fidelidade", label: "Fidelidade", icon: Star, cap: "loyalty" },
+      { to: "/app/relacionamento", label: "Follow-ups", icon: Repeat, cap: "crm_done" },
+      { to: "/app/fidelidade", label: "Fidelidade", icon: Star, cap: "loyalty_done" },
     ],
   },
   {
@@ -511,8 +511,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Sparkles className="size-3.5" /> Dica
             </p>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Registre atendimentos direto pelo PDV: a venda, o caixa, a comissão e a
-              fidelidade são atualizados sozinhos.
+              Registre atendimentos direto pelo PDV: a venda, o caixa e a comissão são
+              atualizados sozinhos.
             </p>
           </div>
         </div>

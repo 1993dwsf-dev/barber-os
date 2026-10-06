@@ -1,5 +1,12 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+
+function autoSku(name: string): string {
+  const base = name.trim().toUpperCase().slice(0, 10).replace(/[^A-Z0-9]/g, "_");
+  const rnd = Math.random().toString(36).slice(2, 5).toUpperCase();
+  return `${base}_${rnd}`;
+}
+
 import type { Id } from "./_generated/dataModel";
 import { audit, bad, notify, requireManage, requireView } from "./lib";
 import { todayISO } from "../lib/dates";
@@ -113,7 +120,7 @@ export const listSuppliers = query({
 export const create = mutation({
   args: {
     organizationId: v.id("organizations"),
-    sku: v.string(),
+    sku: v.optional(v.string()),
     name: v.string(),
     category: v.string(),
     supplierId: v.optional(v.id("suppliers")),
@@ -127,12 +134,12 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "products");
     if (!args.name.trim()) bad("Informe o nome do produto.");
-    if (!args.sku.trim()) bad("Informe o SKU do produto.");
     if (args.priceCents < args.costCents)
       bad("O preço de venda não pode ser menor que o custo.");
+    const sku = (args.sku?.trim() ?? "").toUpperCase() || autoSku(args.name.trim());
     const id = await ctx.db.insert("products", {
       organizationId: org._id,
-      sku: args.sku.trim().toUpperCase(),
+      sku,
       name: args.name.trim(),
       category: args.category,
       supplierId: args.supplierId,

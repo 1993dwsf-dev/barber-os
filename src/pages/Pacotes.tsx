@@ -66,7 +66,7 @@ export default function Pacotes() {
       <PageHeader
         eyebrow="Catálogo"
         title="Pacotes de serviços"
-        description="Venda créditos de serviços com validade. O crédito é consumido no atendimento e não entra novamente na receita quando usado."
+        description="Venda pacotes de serviços que geram créditos com validade. Cada serviço incluído no pacote concede créditos ao cliente, que são consumidos nos atendimentos. Quando o crédito é usado, ele não é contabilizado como nova receita — a receita já foi registrada na venda do pacote."
         actions={
           canEdit("packages") ? (
             <Button onClick={() => { setEditing(null); setOpen(true); }}>
@@ -249,9 +249,9 @@ function BuyPackageButton({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="glass-strong">
           <DialogHeader>
-            <DialogTitle>Vender “{name}”</DialogTitle>
-            <DialogDescription>
-              A venda gera um pagamento real e cria os créditos do cliente.
+            <DialogTitle>Vender “{name}”</DialogTitle>              <DialogDescription>
+              A venda registra o pagamento real e cria os créditos do cliente no pacote.
+              Cada crédito é consumido em um atendimento e não entra novamente na receita.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
@@ -422,7 +422,8 @@ function PackageDialog({
         <DialogHeader>
           <DialogTitle>{packageId ? "Editar pacote" : "Novo pacote"}</DialogTitle>
           <DialogDescription>
-            Cada serviço do pacote gera créditos que o cliente consome nos atendimentos.
+            Cada serviço incluído no pacote gera créditos que o cliente consome durante os
+            atendimentos. A validade define o prazo para usar os créditos desde a compra.
           </DialogDescription>
         </DialogHeader>
 

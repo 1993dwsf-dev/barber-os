@@ -301,7 +301,7 @@ const schema = defineSchema(
 
     products: defineTable({
       organizationId: v.id("organizations"),
-      sku: v.string(),
+      sku: v.optional(v.string()),
       name: v.string(),
       category: v.string(),
       supplierId: v.optional(v.id("suppliers")),
