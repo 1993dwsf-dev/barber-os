@@ -6,10 +6,10 @@ import { AppShell } from "@/components/AppShell";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
-import React, { StrictMode, useEffect, lazy, Suspense } from "react";
+import React, { StrictMode, lazy, Suspense, useEffect } from "react";
 import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import "./index.css";
 import { OrgProvider } from "@/lib/org-context";
 
@@ -66,11 +66,8 @@ class ToolbarErrorBoundary extends React.Component<
 }
 
 /**
- * Hard guard so runtime errors never leave the preview as a blank page.
- *
- * O rastreamento técnico (stack trace) só aparece em desenvolvimento: em
- * produção ele expõe caminhos de arquivo, nomes de módulos internos e, às
- * vezes, fragmentos de dados. O log completo continua no console do navegador.
+ * Guardião genérico para que erros de runtime nunca gerem tela em branco na preview.
+ * Mostra stack trace só em dev; em produção exibe mensagem genérica e orienta a recarregar.
  */
 class RootErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -113,14 +110,13 @@ class RootErrorBoundary extends React.Component<
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
-function RouteSyncer() {
-  const location = useLocation();
+function VlyRouteBridge() {
   useEffect(() => {
     window.parent.postMessage(
-      { type: "iframe-route-change", path: location.pathname },
+      { type: "iframe-route-change" },
       "*",
     );
-  }, [location.pathname]);
+  }, []);
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
@@ -157,7 +153,7 @@ createRoot(document.getElementById("root")!).render(
       </ToolbarErrorBoundary>
       <ConvexAuthProvider client={convex}>
         <BrowserRouter>
-          <RouteSyncer />
+          <VlyRouteBridge />
           <Suspense fallback={<RouteLoading />}>
             <Routes>
               <Route path="/" element={<Landing />} />
@@ -167,16 +163,7 @@ createRoot(document.getElementById("root")!).render(
               />
               <Route
                 path="/onboarding"
-                element={
-                  <RequireAuth
-                    title="Crie sua barbearia para continuar"
-                    description="Você precisa de uma unidade para acessar o BarberFlow OS."
-                  >
-                    <OrgProvider>
-                      <Onboarding />
-                    </OrgProvider>
-                  </RequireAuth>
-                }
+                element={<Protected><Onboarding /></Protected>}
               />
 
               <Route path="/dashboard" element={<Navigate to="/app" replace />} />
