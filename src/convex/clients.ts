@@ -2,7 +2,23 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { audit, bad, requireManage, requireView } from "./lib";
+import { requiredText, text, textList } from "./validation";
 import { todayISO } from "../lib/dates";
+
+/** Telefone normalizado: só dígitos, entre 10 (fixo+DDD) e 13 (55 + celular). */
+function assertPhone(phone: string): string {
+  const trimmed = requiredText(phone, "phone", "Telefone");
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length < 10 || digits.length > 13) bad("Informe um telefone válido com DDD.");
+  return trimmed;
+}
+
+/** Checagem leve de e-mail (o cadastro aceita valor vazio). */
+function assertEmail(email: string | undefined): string | undefined {
+  const value = text(email, "email", "E-mail");
+  if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value)) bad("Informe um e-mail válido.");
+  return value;
+}
 
 export const list = query({
   args: {
@@ -246,26 +262,25 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "clients");
-    if (!args.name.trim()) bad("Informe o nome do cliente.");
-    const digits = args.phone.replace(/\D/g, "");
-    if (digits.length < 10) bad("Informe um telefone válido com DDD.");
+    const name = requiredText(args.name, "name", "Nome do cliente");
+    const phone = assertPhone(args.phone);
     const duplicate = await ctx.db
       .query("clients")
       .withIndex("by_org_phone", (q) =>
-        q.eq("organizationId", org._id).eq("phone", args.phone),
+        q.eq("organizationId", org._id).eq("phone", phone),
       )
       .first();
     if (duplicate) bad("Já existe um cliente com este telefone.");
     const id = await ctx.db.insert("clients", {
       organizationId: org._id,
-      name: args.name.trim(),
-      phone: args.phone,
-      email: args.email,
-      birthDate: args.birthDate,
-      gender: args.gender,
+      name,
+      phone,
+      email: assertEmail(args.email),
+      birthDate: text(args.birthDate, "unit", "Nascimento"),
+      gender: text(args.gender, "name", "Gênero"),
       preferredBarberId: args.preferredBarberId,
-      tags: args.tags ?? [],
-      notes: args.notes,
+      tags: textList(args.tags, "tag", 20, "Etiquetas") ?? [],
+      notes: text(args.notes, "note", "Observações"),
       consentMarketing: args.consentMarketing ?? false,
       status: "ativo",
       totalVisits: 0,
@@ -279,7 +294,7 @@ export const create = mutation({
       module: "Clientes",
       recordType: "clients",
       recordId: id,
-      summary: `Cliente "${args.name}" cadastrado`,
+      summary: `Cliente "${name}" cadastrado`,
     });
     return id;
   },
@@ -305,9 +320,15 @@ export const update = mutation({
     const client = await ctx.db.get(args.clientId);
     if (!client || client.organizationId !== org._id) bad("Cliente não encontrado.");
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
-    for (const key of ["name", "phone", "email", "birthDate", "gender", "tags", "notes", "consentMarketing", "status"] as const) {
-      if (args[key] !== undefined) patch[key] = args[key];
-    }
+    if (args.name !== undefined) patch.name = requiredText(args.name, "name", "Nome do cliente");
+    if (args.phone !== undefined) patch.phone = assertPhone(args.phone);
+    if (args.email !== undefined) patch.email = assertEmail(args.email);
+    if (args.birthDate !== undefined) patch.birthDate = text(args.birthDate, "unit", "Nascimento");
+    if (args.gender !== undefined) patch.gender = text(args.gender, "name", "Gênero");
+    if (args.tags !== undefined) patch.tags = textList(args.tags, "tag", 20, "Etiquetas") ?? [];
+    if (args.notes !== undefined) patch.notes = text(args.notes, "note", "Observações");
+    if (args.consentMarketing !== undefined) patch.consentMarketing = args.consentMarketing;
+    if (args.status !== undefined) patch.status = args.status;
     if (args.preferredBarberId !== undefined) patch.preferredBarberId = args.preferredBarberId;
     await ctx.db.patch(client._id, patch);
     await audit(ctx, org._id, userId, {
@@ -368,13 +389,13 @@ export const addNote = mutation({
   },
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "clients");
-    if (!args.body.trim()) bad("Escreva a anotação.");
+    const body = requiredText(args.body, "note", "Anotação");
     const client = await ctx.db.get(args.clientId);
     if (!client || client.organizationId !== org._id) bad("Cliente não encontrado.");
     const id = await ctx.db.insert("clientNotes", {
       organizationId: org._id,
       clientId: args.clientId,
-      body: args.body.trim(),
+      body,
       userId: userId as Id<"users">,
       createdAt: Date.now(),
     });

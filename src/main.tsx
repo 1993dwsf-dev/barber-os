@@ -32,6 +32,7 @@ const Despesas = lazy(() => import("./pages/Despesas.tsx"));
 const Comissoes = lazy(() => import("./pages/Comissoes.tsx"));
 const Relatorios = lazy(() => import("./pages/Relatorios.tsx"));
 const Configuracoes = lazy(() => import("./pages/Configuracoes.tsx"));
+const Legal = lazy(() => import("./pages/Legal.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 // Simple loading fallback for route transitions
@@ -64,7 +65,13 @@ class ToolbarErrorBoundary extends React.Component<
   }
 }
 
-/** Hard guard so runtime errors never leave the preview as a blank page. */
+/**
+ * Hard guard so runtime errors never leave the preview as a blank page.
+ *
+ * O rastreamento técnico (stack trace) só aparece em desenvolvimento: em
+ * produção ele expõe caminhos de arquivo, nomes de módulos internos e, às
+ * vezes, fragmentos de dados. O log completo continua no console do navegador.
+ */
 class RootErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; message: string; stack: string }
@@ -74,7 +81,7 @@ class RootErrorBoundary extends React.Component<
     return {
       hasError: true,
       message: error.message || "Unknown runtime error",
-      stack: error.stack || "",
+      stack: import.meta.env.DEV ? error.stack || "" : "",
     };
   }
   componentDidCatch(err: Error) {
@@ -85,8 +92,12 @@ class RootErrorBoundary extends React.Component<
       return (
         <div className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
           <div className="max-w-lg text-center">
-            <p className="text-sm font-semibold">Preview runtime error</p>
+            <p className="text-sm font-semibold">Ocorreu um erro inesperado</p>
             <p className="mt-2 text-xs break-words text-muted-foreground">{this.state.message}</p>
+            <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground/80">
+              Recarregue a página para continuar. Se o problema persistir, fale com o suporte
+              informando o horário do erro.
+            </p>
             {this.state.stack && (
               <pre className="mt-3 max-h-40 overflow-auto rounded border border-border/60 p-2 text-left text-[10px] leading-4 text-muted-foreground/80">
                 {this.state.stack}
@@ -188,6 +199,9 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/app/comissoes" element={<Protected><Comissoes /></Protected>} />
               <Route path="/app/relatorios" element={<Protected><Relatorios /></Protected>} />
               <Route path="/app/configuracoes" element={<Protected><Configuracoes /></Protected>} />
+
+              <Route path="/privacidade" element={<Legal />} />
+              <Route path="/termos" element={<Legal />} />
 
               <Route path="*" element={<NotFound />} />
             </Routes>

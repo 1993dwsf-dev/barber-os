@@ -12,7 +12,9 @@ import {
   requireOwner,
   requireUserId,
 } from "./lib";
-import { APP_ROLES, type AppRole } from "../lib/rbac";
+import { APP_ROLES, type AppRole, type Cap } from "../lib/rbac";
+import { clearRateLimit, enforceRateLimit } from "./rateLimit";
+import { requiredText, text } from "./validation";
 import { seedDemoData } from "./seed";
 
 export const DEFAULT_SERVICE_CATEGORIES = ["Cabelo", "Barba", "Combo", "Química", "Estética"];
@@ -51,6 +53,97 @@ export const defaultSettings = () => ({
 });
 
 const roleValidator = v.union(...APP_ROLES.map((r) => v.literal(r)));
+
+/* ------------------------------ validação de configurações ------------------------------ */
+
+const PAYMENT_METHODS = ["dinheiro", "debito", "credito", "pix"] as const;
+
+export function stringList(value: unknown, label: string, maxItems: number): string[] {
+  if (!Array.isArray(value)) bad(`${label} inválido.`);
+  if (value.length > maxItems) bad(`${label}: no máximo ${maxItems} item(ns).`);
+  return value.map((item) => {
+    if (typeof item !== "string") bad(`${label} inválido.`);
+    const trimmed = item.trim();
+    if (!trimmed || trimmed.length > 60) bad(`${label} inválido.`);
+    return trimmed;
+  });
+}
+
+function numberIn(value: unknown, label: string, min: number, max: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) bad(`${label} inválido.`);
+  if (value < min || value > max) bad(`${label} deve estar entre ${min} e ${max}.`);
+  return value;
+}
+
+function booleanValue(value: unknown, label: string): boolean {
+  if (typeof value !== "boolean") bad(`${label} inválido.`);
+  return value;
+}
+
+/**
+ * `settings` chega do cliente e antes era gravado com `{ ...org.settings, ...input }`
+ * sem nenhuma checagem (`v.any()`). Isso permitia gravar chaves desconhecidas,
+ * tipos errados e valores absurdos (ex.: percentual de comissão de 1.000.000).
+ * Aqui só passam chaves conhecidas, com tipo e faixa validados.
+ */
+export function sanitizeSettings(input: unknown): Record<string, unknown> {
+  if (typeof input !== "object" || input === null) bad("Configurações inválidas.");
+  const src = input as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+
+  if ("activePaymentMethods" in src) {
+    const methods = stringList(src.activePaymentMethods, "Formas de pagamento", 8);
+    if (methods.length === 0) bad("Mantenha ao menos uma forma de pagamento ativa.");
+    for (const method of methods) {
+      if (!PAYMENT_METHODS.includes(method as never)) bad(`Forma de pagamento inválida: ${method}.`);
+    }
+    out.activePaymentMethods = methods;
+  }
+  if ("serviceCategories" in src)
+    out.serviceCategories = stringList(src.serviceCategories, "Categorias de serviço", 40);
+  if ("productCategories" in src)
+    out.productCategories = stringList(src.productCategories, "Categorias de produto", 40);
+  if ("expenseCategories" in src)
+    out.expenseCategories = stringList(src.expenseCategories, "Categorias de despesa", 40);
+
+  if ("defaultCommissionModel" in src) {
+    const model = src.defaultCommissionModel;
+    if (model !== "percentual" && model !== "fixo") bad("Modelo de comissão inválido.");
+    out.defaultCommissionModel = model;
+  }
+  if ("defaultCommissionValue" in src)
+    out.defaultCommissionValue = numberIn(
+      src.defaultCommissionValue,
+      "Valor padrão de comissão",
+      0,
+      1_000_000,
+    );
+  if ("loyaltyPointsPerReal" in src)
+    out.loyaltyPointsPerReal = numberIn(src.loyaltyPointsPerReal, "Pontos por real", 0, 100);
+  if ("loyaltyVisitRule" in src) {
+    const rule = src.loyaltyVisitRule;
+    if (typeof rule !== "object" || rule === null) bad("Regra de bônus por visitas inválida.");
+    const r = rule as Record<string, unknown>;
+    out.loyaltyVisitRule = {
+      visits: numberIn(r.visits, "Visitas do bônus", 0, 1_000),
+      points: numberIn(r.points, "Pontos do bônus", 0, 100_000),
+    };
+  }
+  if ("inactivityDays" in src)
+    out.inactivityDays = numberIn(src.inactivityDays, "Dias de inatividade", 1, 3_650);
+  if ("appointmentSlotMin" in src)
+    out.appointmentSlotMin = numberIn(src.appointmentSlotMin, "Intervalo da agenda", 5, 240);
+  if ("lowStockAlerts" in src)
+    out.lowStockAlerts = booleanValue(src.lowStockAlerts, "Alerta de estoque mínimo");
+  if ("allowNegativeStock" in src)
+    out.allowNegativeStock = booleanValue(src.allowNegativeStock, "Estoque negativo");
+  if ("cancellationPolicy" in src)
+    out.cancellationPolicy = text(String(src.cancellationPolicy ?? ""), "note", "Política de cancelamento") ?? "";
+  if ("noShowPolicy" in src)
+    out.noShowPolicy = text(String(src.noShowPolicy ?? ""), "note", "Política de faltas") ?? "";
+
+  return out;
+}
 
 function randomCode(len = 6): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -122,14 +215,15 @@ export const createOrganization = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
+    await enforceRateLimit(ctx, userId, "createOrganization");
     const now = Date.now();
-    if (!args.name.trim()) bad("Informe o nome da barbearia.");
+    const name = requiredText(args.name, "name", "Nome da barbearia");
     const orgId = await ctx.db.insert("organizations", {
-      name: args.name.trim(),
+      name,
       ownerId: userId as Id<"users">,
-      phone: args.phone,
-      address: args.address,
-      email: args.email,
+      phone: text(args.phone, "phone", "Telefone"),
+      address: text(args.address, "address", "Endereço"),
+      email: text(args.email, "email", "E-mail"),
       businessHours: defaultBusinessHours(),
       settings: defaultSettings(),
       inviteCode: randomCode(),
@@ -150,7 +244,7 @@ export const createOrganization = mutation({
       module: "Organização",
       recordType: "organizations",
       recordId: orgId,
-      summary: `Organização "${args.name}" criada`,
+      summary: `Organização "${name}" criada`,
     });
     return orgId;
   },
@@ -173,9 +267,25 @@ export const updateOrganization = mutation({
   handler: async (ctx, { organizationId, businessHours, settings, ...rest }) => {
     const { userId, org } = await requireManage(ctx, organizationId, "settings");
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
-    for (const [k, val] of Object.entries(rest)) if (val !== undefined) patch[k] = val;
-    if (businessHours) patch.businessHours = businessHours;
-    if (settings) patch.settings = { ...org.settings, ...settings };
+    if (rest.name !== undefined) patch.name = requiredText(rest.name, "name", "Nome");
+    if (rest.phone !== undefined) patch.phone = text(rest.phone, "phone", "Telefone");
+    if (rest.address !== undefined) patch.address = text(rest.address, "address", "Endereço");
+    if (rest.email !== undefined) patch.email = text(rest.email, "email", "E-mail");
+    if (businessHours) {
+      if (businessHours.length > 7) bad("Horário de funcionamento inválido.");
+      for (const day of businessHours) {
+        if (!Number.isInteger(day.weekday) || day.weekday < 0 || day.weekday > 6)
+          bad("Horário de funcionamento inválido.");
+        if (typeof day.start !== "string" || typeof day.end !== "string")
+          bad("Horário de funcionamento inválido.");
+        if (!/^\d{2}:\d{2}$/.test(day.start) || !/^\d{2}:\d{2}$/.test(day.end))
+          bad("Use horários no formato HH:MM.");
+        if (day.enabled && day.start >= day.end)
+          bad("O horário de fechamento precisa ser depois da abertura.");
+      }
+      patch.businessHours = businessHours;
+    }
+    if (settings) patch.settings = { ...org.settings, ...sanitizeSettings(settings) };
     await ctx.db.patch(organizationId, patch);
     await audit(ctx, organizationId, userId, {
       action: "atualizou",
@@ -255,6 +365,7 @@ export const regenerateInviteCode = mutation({
   args: { organizationId: v.id("organizations") },
   handler: async (ctx, { organizationId }) => {
     const { userId } = await requireManage(ctx, organizationId, "settings");
+    await enforceRateLimit(ctx, userId, "regenerateInviteCode");
     const code = randomCode();
     await ctx.db.patch(organizationId, { inviteCode: code, updatedAt: Date.now() });
     await audit(ctx, organizationId, userId, {
@@ -270,12 +381,17 @@ export const joinByInviteCode = mutation({
   args: { code: v.string() },
   handler: async (ctx, { code }) => {
     const userId = await requireUserId(ctx);
+    // O código tem 6 caracteres: sem limite, um atacante poderia varrer o
+    // espaço de códigos de todas as unidades.
+    await enforceRateLimit(ctx, userId, "joinByInviteCode");
     const normalized = code.trim().toUpperCase();
+    if (!/^[A-Z0-9]{4,8}$/.test(normalized)) bad("Código de convite inválido.");
     const org = await ctx.db
       .query("organizations")
       .withIndex("by_invite", (q) => q.eq("inviteCode", normalized))
       .first();
     if (!org) bad("Código de convite inválido.");
+    await clearRateLimit(ctx, userId, "joinByInviteCode");
     const existing = await ctx.db
       .query("organizationMembers")
       .withIndex("by_org_user", (q) =>
@@ -303,10 +419,31 @@ export const joinByInviteCode = mutation({
 export const generateUploadUrl = mutation({
   args: { organizationId: v.id("organizations") },
   handler: async (ctx, { organizationId }) => {
-    await requireMember(ctx, organizationId);
+    const { userId } = await requireMember(ctx, organizationId);
+    await enforceRateLimit(ctx, userId, "generateUploadUrl");
     return await ctx.storage.generateUploadUrl();
   },
 });
+
+/** Tamanho máximo de anexo (comprovantes de despesa, documentos). */
+export const MAX_FILE_BYTES = 8 * 1024 * 1024; // 8 MB
+
+/** Formatos aceitos — barra HTML/script disfarçado de anexo. */
+export const ALLOWED_FILE_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+];
+
+/** Módulo ao qual cada tipo de anexo pertence (define quem pode registrar). */
+const FILE_RECORD_CAPS: Record<string, Cap> = {
+  expenses: "expenses",
+  clients: "clients",
+  products: "products",
+  services: "catalog",
+  organizations: "settings",
+};
 
 export const recordFile = mutation({
   args: {
@@ -319,14 +456,23 @@ export const recordFile = mutation({
     size: v.number(),
   },
   handler: async (ctx, args) => {
-    const { userId } = await requireMember(ctx, args.organizationId);
+    const recordType = args.recordType.trim().toLowerCase();
+    const cap = FILE_RECORD_CAPS[recordType];
+    if (!cap) bad("Tipo de anexo não permitido.");
+    const { userId } = await requireManage(ctx, args.organizationId, cap);
+    const name = requiredText(args.name, "name", "Nome do arquivo");
+    const mimeType = args.mimeType.trim().toLowerCase();
+    if (!ALLOWED_FILE_MIME_TYPES.includes(mimeType))
+      bad("Formato não permitido. Envie imagem (JPG, PNG, WebP) ou PDF.");
+    if (!Number.isFinite(args.size) || args.size <= 0 || args.size > MAX_FILE_BYTES)
+      bad(`O arquivo deve ter no máximo ${MAX_FILE_BYTES / 1024 / 1024} MB.`);
     return await ctx.db.insert("files", {
       organizationId: args.organizationId,
       storageId: args.storageId,
-      recordType: args.recordType,
+      recordType,
       recordId: args.recordId,
-      name: args.name,
-      mimeType: args.mimeType,
+      name,
+      mimeType,
       size: args.size,
       uploadedBy: userId as Id<"users">,
       createdAt: Date.now(),
@@ -338,6 +484,15 @@ export const getFileUrl = query({
   args: { organizationId: v.id("organizations"), storageId: v.id("_storage") },
   handler: async (ctx, { organizationId, storageId }) => {
     await requireMember(ctx, organizationId);
+    // O anexo precisa estar registrado PARA esta organização. Antes qualquer
+    // membro de qualquer unidade podia pedir a URL de um storageId alheio.
+    const file = await ctx.db
+      .query("files")
+      .withIndex("by_org_storage", (q) =>
+        q.eq("organizationId", organizationId).eq("storageId", storageId),
+      )
+      .first();
+    if (!file) bad("Arquivo não encontrado nesta unidade.");
     return await ctx.storage.getUrl(storageId);
   },
 });
@@ -348,6 +503,7 @@ export const enterDemoMode = mutation({
   args: {},
   handler: async (ctx) => {
     const userId = await requireUserId(ctx);
+    await enforceRateLimit(ctx, userId, "enterDemoMode");
     // Se já participa de uma organização demo, reusa.
     const memberships = await ctx.db
       .query("organizationMembers")
@@ -456,6 +612,13 @@ export async function wipeOrgData(
       .query(table)
       .withIndex("by_org", (q) => q.eq("organizationId", organizationId))
       .collect();
+    if (table === "files") {
+      // Sem isso, apagar/limpar a unidade deixava os blobs órfãos no storage.
+      for (const row of rows) {
+        const storageId = (row as unknown as { storageId?: Id<"_storage"> }).storageId;
+        if (storageId) await ctx.storage.delete(storageId);
+      }
+    }
     for (const row of rows) await ctx.db.delete(row._id as Id<"organizations">);
   }
 }

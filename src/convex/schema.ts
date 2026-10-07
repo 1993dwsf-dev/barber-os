@@ -615,7 +615,25 @@ const schema = defineSchema(
       size: v.number(),
       uploadedBy: v.id("users"),
       createdAt: v.number(),
-    }).index("by_org", ["organizationId"]),
+    })
+      .index("by_org", ["organizationId"])
+      .index("by_org_storage", ["organizationId", "storageId"])
+      .index("by_storage", ["storageId"]),
+
+    /* ------------------------------ limites de uso / abuso ------------------------------ */
+
+    // Janela deslizante de tentativas por usuário e ação. Usado para barrar
+    // força bruta (código de convite), criação em massa de organizações e
+    // abuso de upload antes de qualquer trabalho de negócio ser executado.
+    rateLimits: defineTable({
+      key: v.string(), // `${action}:${userId}`
+      action: v.string(),
+      userId: v.optional(v.id("users")),
+      createdAt: v.number(),
+      expiresAt: v.number(),
+    })
+      .index("by_key", ["key"])
+      .index("by_expires", ["expiresAt"]),
   },
   { schemaValidation: false },
 );

@@ -6,8 +6,10 @@ import {
   bad,
   notify,
   requireManage,
+  requireSameOrg,
   requireView,
 } from "./lib";
+import { text } from "./validation";
 import { timeToMin, todayISO, weekdayOf } from "../lib/dates";
 import { recordSale } from "./sales";
 
@@ -178,8 +180,8 @@ export const create = mutation({
     const { org, userId } = await requireManage(ctx, args.organizationId, "agenda");
     const service = await ctx.db.get(args.serviceId);
     if (!service || service.organizationId !== org._id) bad("Serviço não encontrado.");
-    const client = await ctx.db.get(args.clientId);
-    if (!client || client.organizationId !== org._id) bad("Cliente não encontrado.");
+    const client = await requireSameOrg(await ctx.db.get(args.clientId), org._id, "Cliente");
+    await requireSameOrg(await ctx.db.get(args.barberId), org._id, "Barbeiro");
     const duration = args.durationMin ?? service.durationMin;
     if (duration <= 0 || duration > 480) bad("Duração do atendimento inválida.");
     if (args.date < todayISO()) bad("Não é possível agendar para uma data passada.");
@@ -206,7 +208,7 @@ export const create = mutation({
       priceCents: args.priceCents ?? service.priceCents,
       status: args.status ?? "agendado",
       paymentStatus: "nao_pago",
-      notes: args.notes,
+      notes: text(args.notes, "note", "Observações"),
       source: args.source ?? "balcao",
       createdBy: userId as Id<"users">,
       createdAt: Date.now(),
@@ -245,6 +247,8 @@ export const update = mutation({
     const date = args.date ?? appt.date;
     const startTime = args.startTime ?? appt.startTime;
     const duration = args.durationMin ?? appt.durationMin;
+    if (args.barberId) await requireSameOrg(await ctx.db.get(args.barberId), org._id, "Barbeiro");
+    if (args.serviceId) await requireSameOrg(await ctx.db.get(args.serviceId), org._id, "Serviço");
     const service = args.serviceId ? await ctx.db.get(args.serviceId) : await ctx.db.get(appt.serviceId);
     const price = args.priceCents ?? (args.serviceId ? (service?.priceCents ?? appt.priceCents) : appt.priceCents);
 
@@ -265,7 +269,7 @@ export const update = mutation({
       startTime,
       durationMin: duration,
       priceCents: price,
-      notes: args.notes ?? appt.notes,
+      notes: text(args.notes, "note", "Observações") ?? appt.notes,
       updatedAt: Date.now(),
     });
     await audit(ctx, org._id, userId, {
@@ -299,7 +303,7 @@ export const setStatus = mutation({
     const client = await ctx.db.get(appt.clientId);
     await ctx.db.patch(appt._id, {
       status: args.status,
-      notes: args.notes ?? appt.notes,
+      notes: text(args.notes, "note", "Observações") ?? appt.notes,
       updatedAt: Date.now(),
     });
     await audit(ctx, org._id, userId, {
@@ -371,7 +375,7 @@ export const complete = mutation({
       barberId: appt.barberId,
       appointmentId: appt._id,
       discountCents: args.discountCents,
-      notes: args.notes ?? appt.notes,
+      notes: text(args.notes, "note", "Observações") ?? appt.notes,
       items: [
         {
           kind: "servico",
@@ -417,13 +421,16 @@ export const addToWaitlist = mutation({
   },
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "agenda");
+    await requireSameOrg(await ctx.db.get(args.clientId), org._id, "Cliente");
+    if (args.serviceId) await requireSameOrg(await ctx.db.get(args.serviceId), org._id, "Serviço");
+    if (args.barberId) await requireSameOrg(await ctx.db.get(args.barberId), org._id, "Barbeiro");
     const id = await ctx.db.insert("waitlist", {
       organizationId: org._id,
       clientId: args.clientId,
       serviceId: args.serviceId,
       barberId: args.barberId,
       preferredDate: args.preferredDate,
-      notes: args.notes,
+      notes: text(args.notes, "note", "Observações"),
       status: "aguardando",
       createdAt: Date.now(),
     });

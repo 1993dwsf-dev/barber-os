@@ -417,6 +417,14 @@ export default function Landing() {
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 text-xs text-muted-foreground sm:flex-row">
           <p>© {new Date().getFullYear()} BarberFlow OS — feito para barbearias.</p>
           <p>Valores em reais (BRL) · datas DD/MM/AAAA · PIX e WhatsApp integrados.</p>
+          <p className="flex items-center gap-4">
+            <Link to="/privacidade" className="transition-colors hover:text-foreground">
+              Privacidade
+            </Link>
+            <Link to="/termos" className="transition-colors hover:text-foreground">
+              Termos
+            </Link>
+          </p>
         </div>
       </footer>
     </div>

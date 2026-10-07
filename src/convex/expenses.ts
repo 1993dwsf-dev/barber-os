@@ -2,6 +2,8 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { audit, bad, requireManage, requireView } from "./lib";
+import { ALLOWED_FILE_MIME_TYPES, MAX_FILE_BYTES } from "./orgs";
+import { requiredText, text } from "./validation";
 import { todayISO } from "../lib/dates";
 
 const methodValidator = v.union(
@@ -81,24 +83,47 @@ export const create = mutation({
     notes: v.optional(v.string()),
     fileStorageId: v.optional(v.id("_storage")),
     fileName: v.optional(v.string()),
+    fileMimeType: v.optional(v.string()),
+    fileSize: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "expenses");
-    if (!args.description.trim()) bad("Descreva a despesa.");
     if (args.amountCents <= 0) bad("Informe um valor maior que zero.");
+    const description = requiredText(args.description, "description", "Descrição");
+    const category = requiredText(args.category, "name", "Categoria");
+    const supplier = text(args.supplier, "name", "Fornecedor");
+    const notes = text(args.notes, "note", "Observações");
+    const fileName = text(args.fileName, "name", "Nome do comprovante");
     const date = args.date ?? todayISO();
+    if (args.fileStorageId) {
+      // Um storageId vindo do cliente não pode apontar para o arquivo de outra
+      // unidade: o anexo passa a ser reivindicado por esta organização, e se já
+      // pertencer a outra o registro é recusado.
+      const existing = await ctx.db
+        .query("files")
+        .withIndex("by_storage", (q) => q.eq("storageId", args.fileStorageId!))
+        .first();
+      if (existing && existing.organizationId !== org._id)
+        bad("Este arquivo pertence a outra unidade.");
+      const mimeType = (args.fileMimeType ?? "application/pdf").trim().toLowerCase();
+      if (!ALLOWED_FILE_MIME_TYPES.includes(mimeType))
+        bad("Formato não permitido. Envie imagem (JPG, PNG, WebP) ou PDF.");
+      const size = args.fileSize ?? 0;
+      if (!Number.isFinite(size) || size <= 0 || size > MAX_FILE_BYTES)
+        bad(`O comprovante deve ter no máximo ${MAX_FILE_BYTES / 1024 / 1024} MB.`);
+    }
     const id = await ctx.db.insert("expenses", {
       organizationId: org._id,
       date,
-      category: args.category,
-      supplier: args.supplier,
-      description: args.description.trim(),
+      category,
+      supplier,
+      description,
       amountCents: args.amountCents,
       method: args.method,
       recurring: args.recurring ?? false,
-      notes: args.notes,
+      notes,
       fileStorageId: args.fileStorageId,
-      fileName: args.fileName,
+      fileName,
       userId: userId as Id<"users">,
       createdAt: Date.now(),
     });
@@ -129,9 +154,9 @@ export const create = mutation({
         storageId: args.fileStorageId,
         recordType: "expenses",
         recordId: id as string,
-        name: args.fileName ?? "comprovante",
-        mimeType: "application/octet-stream",
-        size: 0,
+        name: fileName ?? "comprovante",
+        mimeType: (args.fileMimeType ?? "application/pdf").trim().toLowerCase(),
+        size: args.fileSize ?? 0,
         uploadedBy: userId as Id<"users">,
         createdAt: Date.now(),
       });
@@ -141,7 +166,7 @@ export const create = mutation({
       module: "Despesas",
       recordType: "expenses",
       recordId: id,
-      summary: `Despesa "${args.description}" — R$ ${(args.amountCents / 100).toFixed(2)}`,
+      summary: `Despesa "${description}" — R$ ${(args.amountCents / 100).toFixed(2)}`,
     });
     return id;
   },
@@ -165,9 +190,19 @@ export const update = mutation({
     const expense = await ctx.db.get(args.expenseId);
     if (!expense || expense.organizationId !== org._id) bad("Despesa não encontrada.");
     const patch: Record<string, unknown> = {};
-    for (const key of ["date", "category", "supplier", "description", "amountCents", "method", "recurring", "notes"] as const) {
-      if (args[key] !== undefined) patch[key] = args[key];
+    if (args.description !== undefined)
+      patch.description = requiredText(args.description, "description", "Descrição");
+    if (args.category !== undefined)
+      patch.category = requiredText(args.category, "name", "Categoria");
+    if (args.supplier !== undefined) patch.supplier = text(args.supplier, "name", "Fornecedor");
+    if (args.notes !== undefined) patch.notes = text(args.notes, "note", "Observações");
+    if (args.date !== undefined) patch.date = args.date;
+    if (args.amountCents !== undefined) {
+      if (args.amountCents <= 0) bad("Informe um valor maior que zero.");
+      patch.amountCents = args.amountCents;
     }
+    if (args.method !== undefined) patch.method = args.method;
+    if (args.recurring !== undefined) patch.recurring = args.recurring;
     await ctx.db.patch(expense._id, patch);
     await audit(ctx, org._id, userId, {
       action: "atualizou",

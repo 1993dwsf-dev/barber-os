@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { audit, bad, ensureLoyaltyAccount, requireManage, requireView } from "./lib";
+import { audit, bad, ensureLoyaltyAccount, requireManage, requireSameOrg, requireView } from "./lib";
+import { requiredText, text } from "./validation";
 import { todayISO } from "../lib/dates";
 
 export const accounts = query({
@@ -81,12 +82,15 @@ export const createReward = mutation({
   },
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "loyalty");
-    if (!args.name.trim()) bad("Informe o nome da recompensa.");
-    if (args.pointsCost <= 0) bad("Informe o custo em pontos.");
+    const name = requiredText(args.name, "name", "Nome da recompensa");
+    if (!Number.isInteger(args.pointsCost) || args.pointsCost <= 0)
+      bad("Informe o custo em pontos (número inteiro maior que zero).");
+    if (args.serviceId) await requireSameOrg(await ctx.db.get(args.serviceId), org._id, "Serviço");
+    if (args.productId) await requireSameOrg(await ctx.db.get(args.productId), org._id, "Produto");
     const id = await ctx.db.insert("loyaltyRewards", {
       organizationId: org._id,
-      name: args.name.trim(),
-      description: args.description,
+      name,
+      description: text(args.description, "description", "Descrição"),
       pointsCost: args.pointsCost,
       kind: args.kind,
       valueCents: args.valueCents,
@@ -100,7 +104,7 @@ export const createReward = mutation({
       module: "Fidelidade",
       recordType: "loyaltyRewards",
       recordId: id,
-      summary: `Recompensa "${args.name}" criada`,
+      summary: `Recompensa "${name}" criada`,
     });
     return id;
   },
@@ -118,11 +122,22 @@ export const updateReward = mutation({
   },
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "loyalty");
-    const reward = await ctx.db.get(args.rewardId);
-    if (!reward || reward.organizationId !== org._id) bad("Recompensa não encontrada.");
+    const reward = await requireSameOrg(
+      await ctx.db.get(args.rewardId),
+      org._id,
+      "Recompensa",
+    );
+    if (args.pointsCost !== undefined && (!Number.isInteger(args.pointsCost) || args.pointsCost <= 0))
+      bad("Informe o custo em pontos (número inteiro maior que zero).");
     await ctx.db.patch(reward._id, {
-      name: args.name ?? reward.name,
-      description: args.description ?? reward.description,
+      name:
+        args.name === undefined
+          ? reward.name
+          : requiredText(args.name, "name", "Nome da recompensa"),
+      description:
+        args.description === undefined
+          ? reward.description
+          : text(args.description, "description", "Descrição"),
       pointsCost: args.pointsCost ?? reward.pointsCost,
       valueCents: args.valueCents ?? reward.valueCents,
       active: args.active ?? reward.active,
@@ -146,11 +161,13 @@ export const redeem = mutation({
   },
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "loyalty");
-    const reward = await ctx.db.get(args.rewardId);
-    if (!reward || reward.organizationId !== org._id) bad("Recompensa não encontrada.");
+    const reward = await requireSameOrg(
+      await ctx.db.get(args.rewardId),
+      org._id,
+      "Recompensa",
+    );
     if (!reward.active) bad("Esta recompensa está inativa.");
-    const client = await ctx.db.get(args.clientId);
-    if (!client || client.organizationId !== org._id) bad("Cliente não encontrado.");
+    const client = await requireSameOrg(await ctx.db.get(args.clientId), org._id, "Cliente");
     const account = await ensureLoyaltyAccount(ctx, org._id, args.clientId);
     if (account.points < reward.pointsCost)
       bad(`Saldo insuficiente: o cliente tem ${account.points} pontos e a recompensa custa ${reward.pointsCost}.`);
@@ -188,7 +205,10 @@ export const adjustPoints = mutation({
   },
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "loyalty");
-    if (args.points === 0) bad("Informe uma quantidade de pontos.");
+    if (!Number.isInteger(args.points) || args.points === 0)
+      bad("Informe uma quantidade de pontos (número inteiro diferente de zero).");
+    await requireSameOrg(await ctx.db.get(args.clientId), org._id, "Cliente");
+    const reason = requiredText(args.reason, "reason", "Motivo do ajuste");
     const account = await ensureLoyaltyAccount(ctx, org._id, args.clientId);
     if (account.points + args.points < 0) bad("O ajuste deixaria o saldo negativo.");
     await ctx.db.patch(account._id, {
@@ -201,7 +221,7 @@ export const adjustPoints = mutation({
       clientId: args.clientId as Id<"clients">,
       type: "ajuste",
       points: args.points,
-      reason: args.reason,
+      reason,
       date: todayISO(),
       createdAt: Date.now(),
     });

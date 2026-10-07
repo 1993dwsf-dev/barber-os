@@ -1,6 +1,18 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { audit, bad, requireManage, requireView } from "./lib";
+import { requiredText, text } from "./validation";
+
+/** Regra de comissão: percentual precisa estar em 0–100; valor fixo em centavos ≥ 0. */
+function assertCommission(
+  model: "herdar" | "percentual" | "fixo",
+  value: number | undefined,
+): void {
+  if (model === "herdar") return;
+  if (value === undefined || !Number.isFinite(value) || value < 0)
+    bad("Informe um valor de comissão válido.");
+  if (model === "percentual" && value > 100) bad("O percentual de comissão deve estar entre 0 e 100.");
+}
 
 export const list = query({
   args: {
@@ -42,14 +54,15 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "catalog");
-    if (!args.name.trim()) bad("Informe o nome do serviço.");
+    const name = requiredText(args.name, "name", "Nome do serviço");
     if (args.durationMin < 5 || args.durationMin > 480) bad("Duração deve estar entre 5 e 480 minutos.");
     if (args.priceCents < 0) bad("Preço inválido.");
+    assertCommission(args.commissionModel ?? "herdar", args.commissionValue);
     const id = await ctx.db.insert("services", {
       organizationId: org._id,
-      category: args.category,
-      name: args.name.trim(),
-      description: args.description,
+      category: requiredText(args.category, "name", "Categoria"),
+      name,
+      description: text(args.description, "description", "Descrição"),
       durationMin: args.durationMin,
       priceCents: args.priceCents,
       commissionModel: args.commissionModel ?? "herdar",
@@ -63,7 +76,7 @@ export const create = mutation({
       module: "Serviços",
       recordType: "services",
       recordId: id,
-      summary: `Serviço "${args.name}" cadastrado`,
+      summary: `Serviço "${name}" cadastrado`,
     });
     return id;
   },
@@ -87,14 +100,28 @@ export const update = mutation({
     const service = await ctx.db.get(args.serviceId);
     if (!service || service.organizationId !== org._id) bad("Serviço não encontrado.");
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
-    for (const key of [
-      "category", "name", "description", "durationMin", "priceCents",
-      "commissionModel", "commissionValue", "active",
-    ] as const) {
-      if (args[key] !== undefined) patch[key] = args[key];
+    if (args.name !== undefined) patch.name = requiredText(args.name, "name", "Nome do serviço");
+    if (args.category !== undefined)
+      patch.category = requiredText(args.category, "name", "Categoria");
+    if (args.description !== undefined)
+      patch.description = text(args.description, "description", "Descrição");
+    if (args.active !== undefined) patch.active = args.active;
+    if (args.durationMin !== undefined) {
+      if (args.durationMin < 5 || args.durationMin > 480)
+        bad("Duração deve estar entre 5 e 480 minutos.");
+      patch.durationMin = args.durationMin;
     }
-    if (args.durationMin !== undefined && (args.durationMin < 5 || args.durationMin > 480))
-      bad("Duração deve estar entre 5 e 480 minutos.");
+    if (args.priceCents !== undefined) {
+      if (args.priceCents < 0) bad("Preço inválido.");
+      patch.priceCents = args.priceCents;
+    }
+    if (args.commissionModel !== undefined || args.commissionValue !== undefined) {
+      const model = args.commissionModel ?? service.commissionModel;
+      const value = args.commissionValue ?? service.commissionValue;
+      assertCommission(model, value);
+      patch.commissionModel = model;
+      patch.commissionValue = model === "herdar" ? undefined : value;
+    }
     await ctx.db.patch(service._id, patch);
     await audit(ctx, org._id, userId, {
       action: "atualizou",

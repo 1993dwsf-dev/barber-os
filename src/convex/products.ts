@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { audit, bad, notify, requireManage, requireView } from "./lib";
+import { requiredText, text } from "./validation";
 import { todayISO } from "../lib/dates";
 
 /** Gera um código interno de produto quando o gestor não informa um. */
@@ -133,23 +134,25 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "products");
-    if (!args.name.trim()) bad("Informe o nome do produto.");
+    const name = requiredText(args.name, "name", "Nome do produto");
+    if (args.costCents < 0 || args.priceCents < 0) bad("Informe custo e preço de venda válidos.");
     if (args.priceCents < args.costCents)
       bad("O preço de venda não pode ser menor que o custo.");
-    const sku = (args.sku?.trim() ?? "").toUpperCase() || autoSku(args.name.trim());
+    if (args.stock < 0 || args.minStock < 0) bad("Estoque e estoque mínimo não podem ser negativos.");
+    const sku = (text(args.sku, "reference", "Código interno") ?? "").toUpperCase() || autoSku(name);
     const id = await ctx.db.insert("products", {
       organizationId: org._id,
       sku,
-      name: args.name.trim(),
-      category: args.category,
+      name,
+      category: requiredText(args.category, "name", "Categoria"),
       supplierId: args.supplierId,
       costCents: args.costCents,
       priceCents: args.priceCents,
       stock: 0,
       minStock: args.minStock,
-      unit: args.unit ?? "un",
+      unit: text(args.unit, "unit", "Unidade") ?? "un",
       active: true,
-      notes: args.notes,
+      notes: text(args.notes, "note", "Observações"),
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
@@ -173,7 +176,7 @@ export const create = mutation({
       module: "Produtos",
       recordType: "products",
       recordId: id,
-      summary: `Produto "${args.name}" cadastrado`,
+      summary: `Produto "${name}" cadastrado`,
     });
     return id;
   },
@@ -199,11 +202,26 @@ export const update = mutation({
     const product = await ctx.db.get(args.productId);
     if (!product || product.organizationId !== org._id) bad("Produto não encontrado.");
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
-    for (const key of [
-      "sku", "name", "category", "supplierId", "costCents", "priceCents",
-      "minStock", "unit", "notes", "active",
-    ] as const) {
-      if (args[key] !== undefined) patch[key] = args[key];
+    if (args.name !== undefined) patch.name = requiredText(args.name, "name", "Nome do produto");
+    if (args.category !== undefined)
+      patch.category = requiredText(args.category, "name", "Categoria");
+    if (args.sku !== undefined)
+      patch.sku = (text(args.sku, "reference", "Código interno") ?? "").toUpperCase();
+    if (args.unit !== undefined) patch.unit = text(args.unit, "unit", "Unidade") ?? "un";
+    if (args.notes !== undefined) patch.notes = text(args.notes, "note", "Observações");
+    if (args.supplierId !== undefined) patch.supplierId = args.supplierId;
+    if (args.active !== undefined) patch.active = args.active;
+    if (args.minStock !== undefined) {
+      if (args.minStock < 0) bad("O estoque mínimo não pode ser negativo.");
+      patch.minStock = args.minStock;
+    }
+    if (args.costCents !== undefined) {
+      if (args.costCents < 0) bad("Informe um custo válido.");
+      patch.costCents = args.costCents;
+    }
+    if (args.priceCents !== undefined) {
+      if (args.priceCents < 0) bad("Informe um preço de venda válido.");
+      patch.priceCents = args.priceCents;
     }
     const cost = args.costCents ?? product.costCents;
     const price = args.priceCents ?? product.priceCents;
@@ -260,9 +278,9 @@ export const addMovement = mutation({
       quantity: abs,
       type,
       unitCostCents: args.unitCostCents,
-      reference: args.reference,
+      reference: text(args.reference, "reference", "Documento"),
       userId: userId as Id<"users">,
-      notes: args.notes,
+      notes: text(args.notes, "note", "Observações"),
       createdAt: Date.now(),
     });
     await audit(ctx, org._id, userId, {
@@ -295,15 +313,23 @@ export const createSupplier = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { org } = await requireManage(ctx, args.organizationId, "products");
-    if (!args.name.trim()) bad("Informe o nome do fornecedor.");
-    return await ctx.db.insert("suppliers", {
+    const { org, userId } = await requireManage(ctx, args.organizationId, "products");
+    const name = requiredText(args.name, "name", "Nome do fornecedor");
+    const id = await ctx.db.insert("suppliers", {
       organizationId: org._id,
-      name: args.name.trim(),
-      phone: args.phone,
-      email: args.email,
-      notes: args.notes,
+      name,
+      phone: text(args.phone, "phone", "Telefone"),
+      email: text(args.email, "email", "E-mail"),
+      notes: text(args.notes, "note", "Observações"),
       createdAt: Date.now(),
     });
+    await audit(ctx, org._id, userId, {
+      action: "criou",
+      module: "Fornecedores",
+      recordType: "suppliers",
+      recordId: id,
+      summary: `Fornecedor "${name}" cadastrado`,
+    });
+    return id;
   },
 });

@@ -1,11 +1,36 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { audit, bad, requireManage, requireView } from "./lib";
+import { audit, bad, requireManage, requireSameOrg, requireView } from "./lib";
+import { dateISO, hexColor, requiredText, text, timeLabel } from "./validation";
 
 const scheduleValidator = v.array(
   v.object({ weekday: v.number(), enabled: v.boolean(), start: v.string(), end: v.string() }),
 );
+
+type ScheduleDay = { weekday: number; enabled: boolean; start: string; end: string };
+
+/**
+ * Valida o expediente do barbeiro: dias únicos, horários no formato 24h e
+ * fim depois do início. Um expediente invertido (fim < início) faria o cálculo
+ * de conflito de agenda rejeitar todos os horários reais do dia.
+ */
+function normalizeSchedule(days: ScheduleDay[] | undefined): ScheduleDay[] | undefined {
+  if (days === undefined) return undefined;
+  if (days.length === 0) bad("Informe ao menos um dia de expediente.");
+  const seen = new Set<number>();
+  return days.map((day) => {
+    if (!Number.isInteger(day.weekday) || day.weekday < 0 || day.weekday > 6)
+      bad("Dia da semana inválido no expediente.");
+    if (seen.has(day.weekday)) bad("Há dias repetidos no expediente.");
+    seen.add(day.weekday);
+    const start = timeLabel(day.start, "Início do expediente");
+    const end = timeLabel(day.end, "Fim do expediente");
+    if (day.enabled && end <= start)
+      bad("O fim do expediente deve ser depois do início.");
+    return { ...day, start, end };
+  });
+}
 
 export const list = query({
   args: {
@@ -105,27 +130,27 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "team");
-    if (!args.name.trim()) bad("Informe o nome do barbeiro.");
+    const name = requiredText(args.name, "name", "Nome do barbeiro");
     const id = await ctx.db.insert("barbers", {
       organizationId: org._id,
-      name: args.name.trim(),
-      phone: args.phone,
-      email: args.email,
-      jobTitle: args.jobTitle ?? "Barbeiro",
+      name,
+      phone: text(args.phone, "phone", "Telefone"),
+      email: text(args.email, "email", "E-mail"),
+      jobTitle: text(args.jobTitle, "reference", "Cargo") ?? "Barbeiro",
       status: "ativo",
-      hireDate: args.hireDate,
+      hireDate: args.hireDate ? dateISO(args.hireDate, "Data de contratação") : undefined,
       commissionModel: args.commissionModel ?? "herdar",
       commissionValue: args.commissionValue,
       schedule:
-        args.schedule ??
+        normalizeSchedule(args.schedule) ??
         [1, 2, 3, 4, 5].map((weekday) => ({
           weekday,
           enabled: true,
           start: "09:00",
           end: "19:00",
         })),
-      notes: args.notes,
-      color: args.color ?? "#b45309",
+      notes: text(args.notes, "note", "Observações"),
+      color: hexColor(args.color, "Cor") ?? "#b45309",
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
@@ -134,7 +159,7 @@ export const create = mutation({
       module: "Equipe",
       recordType: "barbers",
       recordId: id,
-      summary: `Barbeiro "${args.name}" cadastrado`,
+      summary: `Barbeiro "${name}" cadastrado`,
     });
     return id;
   },
@@ -158,12 +183,20 @@ export const update = mutation({
   },
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "team");
-    const barber = await ctx.db.get(args.barberId);
-    if (!barber || barber.organizationId !== org._id) bad("Barbeiro não encontrado.");
+    const barber = await requireSameOrg(await ctx.db.get(args.barberId), org._id, "Barbeiro");
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
+    if (args.name !== undefined) patch.name = requiredText(args.name, "name", "Nome do barbeiro");
+    if (args.phone !== undefined) patch.phone = text(args.phone, "phone", "Telefone");
+    if (args.email !== undefined) patch.email = text(args.email, "email", "E-mail");
+    if (args.jobTitle !== undefined)
+      patch.jobTitle = text(args.jobTitle, "reference", "Cargo") ?? "Barbeiro";
+    if (args.hireDate !== undefined)
+      patch.hireDate = dateISO(args.hireDate, "Data de contratação");
+    if (args.schedule !== undefined) patch.schedule = normalizeSchedule(args.schedule);
+    if (args.notes !== undefined) patch.notes = text(args.notes, "note", "Observações");
+    if (args.color !== undefined) patch.color = hexColor(args.color, "Cor");
     for (const key of [
-      "name", "phone", "email", "jobTitle", "status", "hireDate",
-      "commissionModel", "commissionValue", "schedule", "notes", "color",
+      "status", "commissionModel", "commissionValue",
     ] as const) {
       if (args[key] !== undefined) patch[key] = args[key];
     }
@@ -186,8 +219,8 @@ export const linkToMember = mutation({
   },
   handler: async (ctx, args) => {
     const { org } = await requireManage(ctx, args.organizationId, "team");
-    const member = await ctx.db.get(args.memberId);
-    if (!member || member.organizationId !== org._id) bad("Membro não encontrado.");
+    const member = await requireSameOrg(await ctx.db.get(args.memberId), org._id, "Membro");
+    if (args.barberId) await requireSameOrg(await ctx.db.get(args.barberId), org._id, "Barbeiro");
     await ctx.db.patch(member._id, { barberId: args.barberId });
   },
 });

@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { audit, bad, notify, requireManage, requireView } from "./lib";
+import { dateISO, requiredText, text } from "./validation";
 import { todayISO } from "../lib/dates";
 
 /** Saldo de caixa esperado a partir da sessão e seus movimentos. */
@@ -120,13 +121,14 @@ export const addMovement = mutation({
       )
       .first();
     if (!session) bad("Não há caixa aberto. Abra o caixa para lançar movimentos.");
+    const description = requiredText(args.description, "reference", "Descrição");
     const id = await ctx.db.insert("cashMovements", {
       organizationId: org._id,
       sessionId: session._id,
       type: args.type,
       amountCents: args.amountCents,
-      description: args.description,
-      date: args.date ?? todayISO(),
+      description,
+      date: args.date ? dateISO(args.date, "Data do movimento") : todayISO(),
       userId: userId as Id<"users">,
       createdAt: Date.now(),
     });
@@ -135,7 +137,7 @@ export const addMovement = mutation({
       module: "Caixa",
       recordType: "cashMovements",
       recordId: id,
-      summary: `${args.type === "entrada" ? "Entrada" : "Saída"} de R$ ${(args.amountCents / 100).toFixed(2)} — ${args.description}`,
+      summary: `${args.type === "entrada" ? "Entrada" : "Saída"} de R$ ${(args.amountCents / 100).toFixed(2)} — ${description}`,
     });
     return id;
   },
@@ -171,7 +173,7 @@ export const closeSession = mutation({
       varianceCents: variance,
       status: "fechado",
       closedBy: userId as Id<"users">,
-      notes: args.notes,
+      notes: text(args.notes, "note", "Observações do fechamento"),
     });
     await audit(ctx, org._id, userId, {
       action: "fechou",

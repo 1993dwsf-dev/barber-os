@@ -1,9 +1,30 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { audit, bad, notify, requireManage, requireView } from "./lib";
+import { audit, bad, notify, requireManage, requireSameOrg, requireView } from "./lib";
+import { dateISO, requiredText, text, textList } from "./validation";
 import { addDaysISO, todayISO } from "../lib/dates";
 import { recordSale } from "./sales";
+
+/**
+ * Valida a lista de serviços de um pacote/plano: cada serviço precisa ser da
+ * própria organização (senão a listagem mostrava serviços de outra barbearia)
+ * e não pode haver repetição.
+ */
+async function assertServiceItems(
+  ctx: Parameters<typeof requireManage>[0],
+  organizationId: Id<"organizations">,
+  items: Array<{ serviceId: Id<"services"> }>,
+  label: string,
+): Promise<void> {
+  if (items.length === 0) bad(`Adicione ao menos um serviço ao ${label}.`);
+  if (items.length > 50) bad(`${label}: no máximo 50 serviços.`);
+  for (const item of items) {
+    await requireSameOrg(await ctx.db.get(item.serviceId), organizationId, "Serviço");
+  }
+  if (new Set(items.map((i) => i.serviceId as string)).size !== items.length)
+    bad(`Há serviços repetidos no ${label}.`);
+}
 
 /* ------------------------------ pacotes ------------------------------ */
 
@@ -86,14 +107,17 @@ export const createPackage = mutation({
   },
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "packages");
-    if (!args.name.trim()) bad("Informe o nome do pacote.");
-    if (args.items.length === 0) bad("Adicione ao menos um serviço ao pacote.");
-    if (args.items.some((i) => i.sessions <= 0)) bad("Sessões devem ser maiores que zero.");
-    if (args.validityDays <= 0) bad("Informe a validade do pacote.");
+    const name = requiredText(args.name, "name", "Nome do pacote");
+    await assertServiceItems(ctx, org._id, args.items, "pacote");
+    if (args.items.some((i) => i.sessions <= 0 || !Number.isInteger(i.sessions)))
+      bad("Sessões devem ser números inteiros maiores que zero.");
+    if (!Number.isInteger(args.validityDays) || args.validityDays <= 0)
+      bad("Informe a validade do pacote em dias.");
+    if (args.priceCents < 0) bad("O preço do pacote não pode ser negativo.");
     const id = await ctx.db.insert("packages", {
       organizationId: org._id,
-      name: args.name.trim(),
-      description: args.description,
+      name,
+      description: text(args.description, "description", "Descrição"),
       priceCents: args.priceCents,
       validityDays: args.validityDays,
       items: args.items,
@@ -106,7 +130,7 @@ export const createPackage = mutation({
       module: "Pacotes",
       recordType: "packages",
       recordId: id,
-      summary: `Pacote "${args.name}" criado`,
+      summary: `Pacote "${name}" criado`,
     });
     return id;
   },
@@ -125,11 +149,20 @@ export const updatePackage = mutation({
   },
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "packages");
-    const pkg = await ctx.db.get(args.packageId);
-    if (!pkg || pkg.organizationId !== org._id) bad("Pacote não encontrado.");
+    const pkg = await requireSameOrg(await ctx.db.get(args.packageId), org._id, "Pacote");
+    if (args.items) {
+      await assertServiceItems(ctx, org._id, args.items, "pacote");
+      if (args.items.some((i) => i.sessions <= 0 || !Number.isInteger(i.sessions)))
+        bad("Sessões devem ser números inteiros maiores que zero.");
+    }
+    if (args.validityDays !== undefined && (!Number.isInteger(args.validityDays) || args.validityDays <= 0))
+      bad("Informe a validade do pacote em dias.");
     await ctx.db.patch(pkg._id, {
-      name: args.name ?? pkg.name,
-      description: args.description ?? pkg.description,
+      name: args.name === undefined ? pkg.name : requiredText(args.name, "name", "Nome do pacote"),
+      description:
+        args.description === undefined
+          ? pkg.description
+          : text(args.description, "description", "Descrição"),
       priceCents: args.priceCents ?? pkg.priceCents,
       validityDays: args.validityDays ?? pkg.validityDays,
       items: args.items ?? pkg.items,
@@ -163,19 +196,17 @@ export const buyPackage = mutation({
   },
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "packages");
-    const pkg = await ctx.db.get(args.packageId);
-    if (!pkg || pkg.organizationId !== org._id) bad("Pacote não encontrado.");
+    const pkg = await requireSameOrg(await ctx.db.get(args.packageId), org._id, "Pacote");
     if (!pkg.active) bad("Este pacote está inativo.");
-    const client = await ctx.db.get(args.clientId);
-    if (!client || client.organizationId !== org._id) bad("Cliente não encontrado.");
-    const date = args.date ?? todayISO();
+    const client = await requireSameOrg(await ctx.db.get(args.clientId), org._id, "Cliente");
+    const date = args.date ? dateISO(args.date, "Data da compra") : todayISO();
 
     const sale = await recordSale(ctx, org, userId as Id<"users">, {
       date,
       clientId: args.clientId,
       items: [{ kind: "pacote", refId: args.packageId, qty: 1, unitPriceCents: pkg.priceCents }],
       payments: args.payments,
-      notes: args.notes,
+      notes: text(args.notes, "note", "Observações"),
     });
 
     const creditsTotal = pkg.items.reduce((s, i) => s + i.sessions, 0);
@@ -245,15 +276,18 @@ export const createPlan = mutation({
   },
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "memberships");
-    if (!args.name.trim()) bad("Informe o nome do plano.");
-    if (args.items.length === 0) bad("Adicione ao menos um serviço ao plano.");
+    const name = requiredText(args.name, "name", "Nome do plano");
+    await assertServiceItems(ctx, org._id, args.items, "plano");
+    if (args.items.some((i) => i.credits <= 0 || !Number.isInteger(i.credits)))
+      bad("Créditos devem ser números inteiros maiores que zero.");
+    if (args.priceCents < 0) bad("O preço do plano não pode ser negativo.");
     const id = await ctx.db.insert("membershipPlans", {
       organizationId: org._id,
-      name: args.name.trim(),
-      description: args.description,
+      name,
+      description: text(args.description, "description", "Descrição"),
       priceCents: args.priceCents,
       items: args.items,
-      benefits: args.benefits ?? [],
+      benefits: textList(args.benefits, "reference", 12, "Benefícios") ?? [],
       active: true,
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -263,7 +297,7 @@ export const createPlan = mutation({
       module: "Assinaturas",
       recordType: "membershipPlans",
       recordId: id,
-      summary: `Plano "${args.name}" criado`,
+      summary: `Plano "${name}" criado`,
     });
     return id;
   },
@@ -282,14 +316,24 @@ export const updatePlan = mutation({
   },
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "memberships");
-    const plan = await ctx.db.get(args.planId);
-    if (!plan || plan.organizationId !== org._id) bad("Plano não encontrado.");
+    const plan = await requireSameOrg(await ctx.db.get(args.planId), org._id, "Plano");
+    if (args.items) {
+      await assertServiceItems(ctx, org._id, args.items, "plano");
+      if (args.items.some((i) => i.credits <= 0 || !Number.isInteger(i.credits)))
+        bad("Créditos devem ser números inteiros maiores que zero.");
+    }
     await ctx.db.patch(plan._id, {
-      name: args.name ?? plan.name,
-      description: args.description ?? plan.description,
+      name: args.name === undefined ? plan.name : requiredText(args.name, "name", "Nome do plano"),
+      description:
+        args.description === undefined
+          ? plan.description
+          : text(args.description, "description", "Descrição"),
       priceCents: args.priceCents ?? plan.priceCents,
       items: args.items ?? plan.items,
-      benefits: args.benefits ?? plan.benefits,
+      benefits:
+        args.benefits === undefined
+          ? plan.benefits
+          : textList(args.benefits, "reference", 12, "Benefícios"),
       active: args.active ?? plan.active,
       updatedAt: Date.now(),
     });
@@ -353,12 +397,10 @@ export const subscribe = mutation({
   },
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "memberships");
-    const plan = await ctx.db.get(args.planId);
-    if (!plan || plan.organizationId !== org._id) bad("Plano não encontrado.");
+    const plan = await requireSameOrg(await ctx.db.get(args.planId), org._id, "Plano");
     if (!plan.active) bad("Este plano está inativo.");
-    const client = await ctx.db.get(args.clientId);
-    if (!client || client.organizationId !== org._id) bad("Cliente não encontrado.");
-    const startDate = args.startDate ?? todayISO();
+    const client = await requireSameOrg(await ctx.db.get(args.clientId), org._id, "Cliente");
+    const startDate = args.startDate ? dateISO(args.startDate, "Início da assinatura") : todayISO();
 
     const creditsTotal = plan.items.reduce((s, i) => s + i.credits, 0);
     const sale = await recordSale(ctx, org, userId as Id<"users">, {
@@ -436,10 +478,9 @@ export const renew = mutation({
     const m = await ctx.db.get(args.membershipId);
     if (!m || m.organizationId !== org._id) bad("Assinatura não encontrada.");
     if (m.status === "cancelada") bad("Assinatura cancelada não pode ser renovada.");
-    const plan = await ctx.db.get(m.planId);
-    const client = await ctx.db.get(m.clientId);
-    if (!plan || !client) bad("Plano ou cliente não encontrado.");
-    const date = args.date ?? todayISO();
+    const plan = await requireSameOrg(await ctx.db.get(m.planId), org._id, "Plano");
+    const client = await requireSameOrg(await ctx.db.get(m.clientId), org._id, "Cliente");
+    const date = args.date ? dateISO(args.date, "Data da renovação") : todayISO();
     const base = m.renewalDate > date ? m.renewalDate : date;
     const renewalDate = addDaysISO(base, 30);
     const creditsTotal = plan.items.reduce((s, i) => s + i.credits, 0);

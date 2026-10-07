@@ -284,6 +284,25 @@ export async function registerSaleStockOut(
   }
 }
 
+/* ------------------------------ integridade de referência ------------------------------ */
+
+/**
+ * Garante que um documento referenciado (cliente, barbeiro, serviço, plano…)
+ * pertence à organização da requisição.
+ *
+ * Sem isso, um ID de outra empresa era aceito como referência e depois
+ * aparecia em listagens que fazem `db.get(id)` — vazando nome e telefone de
+ * clientes e barbeiros de outro tenant.
+ */
+export async function requireSameOrg<T extends { organizationId: unknown }>(
+  doc: T | null | undefined,
+  organizationId: string,
+  label: string,
+): Promise<T> {
+  if (!doc || String(doc.organizationId) !== organizationId) bad(`${label} não encontrado.`);
+  return doc;
+}
+
 /* ------------------------------ erros ------------------------------ */
 
 export function bad(message: string): never {

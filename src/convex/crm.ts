@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { audit, bad, requireManage, requireView } from "./lib";
+import { audit, bad, requireManage, requireSameOrg, requireView } from "./lib";
+import { requiredText, text } from "./validation";
 import { addDaysISO, birthdayWithin, daysBetween, todayISO } from "../lib/dates";
 
 /* ------------------------------ follow-ups ------------------------------ */
@@ -68,12 +69,14 @@ export const createFollowup = mutation({
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "crm");
     if (!args.title.trim()) bad("Informe o título da tarefa.");
+    await requireSameOrg(await ctx.db.get(args.clientId), org._id, "Cliente");
+    const title = requiredText(args.title, "name", "Título da tarefa");
     const id = await ctx.db.insert("followups", {
       organizationId: org._id,
       clientId: args.clientId,
       reason: args.reason,
-      title: args.title.trim(),
-      notes: args.notes,
+      title,
+      notes: text(args.notes, "note", "Observações"),
       ownerId: userId as Id<"users">,
       dueDate: args.dueDate ?? todayISO(),
       priority: args.priority ?? "media",
@@ -85,7 +88,7 @@ export const createFollowup = mutation({
       module: "Relacionamento",
       recordType: "followups",
       recordId: id,
-      summary: `Follow-up criado: ${args.title}`,
+      summary: `Follow-up criado: ${title}`,
     });
     return id;
   },
@@ -318,8 +321,11 @@ export const createFeedback = mutation({
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "crm");
     if (args.rating < 1 || args.rating > 5) bad("Nota inválida (1 a 5).");
-    const client = await ctx.db.get(args.clientId);
-    if (!client || client.organizationId !== org._id) bad("Cliente não encontrado.");
+    const client = await requireSameOrg(await ctx.db.get(args.clientId), org._id, "Cliente");
+    if (args.barberId) await requireSameOrg(await ctx.db.get(args.barberId), org._id, "Barbeiro");
+    if (args.serviceId) await requireSameOrg(await ctx.db.get(args.serviceId), org._id, "Serviço");
+    if (args.appointmentId)
+      await requireSameOrg(await ctx.db.get(args.appointmentId), org._id, "Agendamento");
     const id = await ctx.db.insert("feedback", {
       organizationId: org._id,
       clientId: args.clientId,
@@ -327,8 +333,8 @@ export const createFeedback = mutation({
       barberId: args.barberId,
       serviceId: args.serviceId,
       rating: args.rating,
-      comment: args.comment,
-      internalNotes: args.internalNotes,
+      comment: text(args.comment, "note", "Comentário"),
+      internalNotes: text(args.internalNotes, "note", "Observações internas"),
       date: args.date ?? todayISO(),
       createdAt: Date.now(),
     });

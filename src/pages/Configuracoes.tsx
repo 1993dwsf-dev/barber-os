@@ -5,6 +5,8 @@ import {
   Building2,
   Clock,
   Copy,
+  FileDown,
+  FileText,
   History,
   Info,
   KeyRound,
@@ -16,6 +18,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,6 +68,7 @@ export default function Configuracoes() {
           <TabsTrigger value="regras">Regras</TabsTrigger>
           <TabsTrigger value="equipe">Equipe</TabsTrigger>
           <TabsTrigger value="auditoria">Auditoria</TabsTrigger>
+          <TabsTrigger value="dados">Dados</TabsTrigger>
         </TabsList>
 
         <TabsContent value="unidade" className="mt-4">
@@ -116,6 +120,10 @@ export default function Configuracoes() {
               </ul>
             )}
           </section>
+        </TabsContent>
+
+        <TabsContent value="dados" className="mt-4">
+          <DataSection orgId={orgId} editable={editable} />
         </TabsContent>
       </Tabs>
 
@@ -667,6 +675,102 @@ function TeamSection({
         </ul>
       )}
     </section>
+  );
+}
+
+/**
+ * Backup/portabilidade: baixa um JSON com tudo que pertence à unidade.
+ * Exige permissão de configurações (owner/admin) e fica registrado na auditoria.
+ */
+function DataSection({ orgId, editable }: { orgId: Id<"organizations">; editable: boolean }) {
+  const exportData = useMutation(api.backup.exportOrganizationData);
+  const [busy, setBusy] = useState(false);
+
+  async function handleExport() {
+    setBusy(true);
+    try {
+      const snapshot = await exportData({ organizationId: orgId });
+      const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
+        type: "application/json;charset=utf-8",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `barberflow-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Backup gerado", {
+        description: `${snapshot.totalRows} registros exportados${
+          snapshot.truncated.length > 0
+            ? ` · tabelas limitadas: ${snapshot.truncated.join(", ")}`
+            : ""
+        }.`,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao exportar os dados");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <section className="glass-chip rounded-2xl p-5">
+        <SectionTitle
+          title="Backup e portabilidade"
+          hint="Baixe uma cópia completa dos dados desta unidade"
+          action={<FileDown className="size-4 text-muted-foreground" />}
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            className="bg-white/60"
+            disabled={!editable || busy}
+            onClick={handleExport}
+          >
+            <FileDown className="size-4" /> {busy ? "Gerando…" : "Exportar dados (JSON)"}
+          </Button>
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+          O arquivo inclui clientes, agenda, vendas, caixa, despesas, estoque, pacotes,
+          assinaturas, fidelidade e trilha de auditoria. Cada exportação fica registrada na
+          auditoria com usuário e horário.
+        </p>
+        {!editable ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Somente proprietário e administrador podem exportar os dados.
+          </p>
+        ) : null}
+      </section>
+
+      <section className="glass-chip mt-4 rounded-2xl p-5">
+        <SectionTitle
+          title="Privacidade e LGPD"
+          hint="Documentos publicados e como atender pedidos de titulares"
+          action={<FileText className="size-4 text-muted-foreground" />}
+        />
+        <ul className="flex flex-col gap-1.5 text-[13px] text-muted-foreground">
+          <li>
+            Política de Privacidade:{" "}
+            <Link to="/privacidade" className="font-medium text-primary hover:underline">
+              /privacidade
+            </Link>
+          </li>
+          <li>
+            Termos de Uso:{" "}
+            <Link to="/termos" className="font-medium text-primary hover:underline">
+              /termos
+            </Link>
+          </li>
+        </ul>
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+          Pedidos de acesso, correção, portabilidade ou exclusão de dados de um cliente podem ser
+          atendidos aqui: exporte o backup da unidade e, quando necessário, exclua o cadastro do
+          cliente em Clientes. Lembre-se de que registros financeiros e fiscais podem ter prazo
+          legal de guarda.
+        </p>
+      </section>
+    </>
   );
 }
 

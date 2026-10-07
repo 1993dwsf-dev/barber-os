@@ -11,9 +11,11 @@ import {
   nextSaleNumber,
   registerSaleStockOut,
   requireManage,
+  requireSameOrg,
   requireView,
   resolveCommission,
 } from "./lib";
+import { text } from "./validation";
 import { todayISO } from "../lib/dates";
 
 export type SaleItemInput = {
@@ -55,6 +57,20 @@ export async function recordSale(
 ): Promise<{ saleId: Id<"sales">; totalCents: number; moneyCents: number }> {
   if (args.items.length === 0) bad("Adicione ao menos um item à venda.");
 
+  // Toda referência precisa pertencer à organização: `applyClientSaleStats` e
+  // `awardLoyalty` escrevem nos documentos referenciados, então um ID de outro
+  // tenant aqui significava alterar dados de outra empresa.
+  if (args.clientId)
+    await requireSameOrg(await ctx.db.get(args.clientId as Id<"clients">), org._id, "Cliente");
+  if (args.barberId)
+    await requireSameOrg(await ctx.db.get(args.barberId as Id<"barbers">), org._id, "Barbeiro");
+  if (args.appointmentId)
+    await requireSameOrg(
+      await ctx.db.get(args.appointmentId as Id<"appointments">),
+      org._id,
+      "Agendamento",
+    );
+
   // Resolve itens e calcula totais
   let subtotal = 0;
   let coveredTotal = 0;
@@ -68,6 +84,24 @@ export async function recordSale(
 
   for (const item of args.items) {
     if (!Number.isFinite(item.qty) || item.qty <= 0) bad("Quantidade inválida.");
+    if (item.barberId)
+      await requireSameOrg(
+        await ctx.db.get(item.barberId as Id<"barbers">),
+        org._id,
+        "Barbeiro",
+      );
+    if (item.clientPackageId)
+      await requireSameOrg(
+        await ctx.db.get(item.clientPackageId as Id<"clientPackages">),
+        org._id,
+        "Pacote do cliente",
+      );
+    if (item.membershipId)
+      await requireSameOrg(
+        await ctx.db.get(item.membershipId as Id<"memberships">),
+        org._id,
+        "Assinatura do cliente",
+      );
     let name = "";
     let unit = item.unitPriceCents ?? 0;
     let cost = item.costCents ?? 0;
@@ -178,7 +212,7 @@ export async function recordSale(
     totalCents: total,
     costCents: costTotal,
     status: "concluida",
-    notes: args.notes,
+    notes: text(args.notes, "note", "Observações"),
     createdBy: userId,
   });
 
