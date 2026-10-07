@@ -85,8 +85,10 @@ Estes itens **não** são resolvidos por código deste repositório:
    integração de APM no código).
 4. **Rotação de segredos** e revisão periódica de membros com papel de
    owner/admin.
-5. **Varredura de dependências** (ex.: `bun audit`/Dependabot) e atualização das
-   libs — não executada nesta revisão.
+5. **Monitoramento contínuo de dependências**: a varredura já foi executada e
+   zerada (`bun audit` → 0 vulnerabilidades), mas precisa virar rotina
+   (CI/Dependabot) para não regredir. O `package.json` mantém um `overrides`
+   fixando `@auth/core` em `^0.41.3` (aviso crítico de normalização de e-mail).
 6. **Teste de carga** com o volume real da barbearia antes de abrir para muitos
    usuários simultâneos.
 
@@ -96,6 +98,8 @@ Estes itens **não** são resolvidos por código deste repositório:
   matriz de permissões (`src/lib/rbac.ts`).
 - `bun convex dev --once && bun tsc -b --noEmit` — codegen e checagem de tipos do
   backend e do frontend.
+- `bun audit` — varredura de vulnerabilidades das dependências (deve continuar
+  sem achados).
 
 ## 8. Operação segura no dia a dia
 
