@@ -85,6 +85,7 @@
   },
   "overrides": {
     "@auth/core": "^0.41.3",
+    "ai": "5.0.209",
   },
   "packages": {
     "@ai-sdk/gateway": ["@ai-sdk/gateway@2.0.108", "", { "dependencies": { "@ai-sdk/provider": "2.0.3", "@ai-sdk/provider-utils": "3.0.28", "@vercel/oidc": "3.1.0" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-86SG+gvko20aD6aM2Z4Mx8rEJYHpC2E2QrrEQzerXkEtruMWJCKwFfeaOKDLn8axN18Lln+HvYbS6cOiRA1J0g=="],

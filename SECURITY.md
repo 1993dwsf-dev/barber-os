@@ -85,12 +85,19 @@ Estes itens **não** são resolvidos por código deste repositório:
    integração de APM no código).
 4. **Rotação de segredos** e revisão periódica de membros com papel de
    owner/admin.
-5. **Monitoramento contínuo de dependências**: a varredura já foi executada e
-   zerada (`bun audit` → 0 vulnerabilidades), mas precisa virar rotina
-   (CI/Dependabot) para não regredir. O `package.json` mantém um `overrides`
-   fixando `@auth/core` em `^0.41.3` (aviso crítico de normalização de e-mail).
-6. **Teste de carga** com o volume real da barbearia antes de abrir para muitos
-   usuários simultâneos.
+5. **Monitoramento contínuo de dependências**: a varredura foi executada e zerada
+   (`bun audit` → 0 · `npm audit --package-lock-only` → 0) e agora roda no CI
+   (`.github/workflows/ci.yml`), mas vale habilitar Dependabot/Renovate para
+   receber avisos de novas versões.
+   Dois `overrides` no `package.json` sustentam isso: `@auth/core ^0.41.3`
+   (aviso crítico de normalização de e-mail, usado pelo login) e `ai 5.0.209`
+   (a linha nova do AI SDK traz `undici` 5.x/@fastify/busboy vulneráveis; o
+   `ai` vem do pacote de integração da plataforma, não é importado pelo app).
+   Os dois lockfiles (`bun.lock` e `package-lock.json`) estão sincronizados.
+6. **Teste de carga** antes de abrir para muitos usuários: o script está pronto
+   (`bun run loadtest`), falta apenas rodar com o volume real.
+7. **Verificação de login/render no navegador** após subir dependências de auth:
+   pedir código em `/auth` e confirmar que chega e autentica.
 
 ## 7. Verificações automatizadas
 
@@ -100,6 +107,15 @@ Estes itens **não** são resolvidos por código deste repositório:
   backend e do frontend.
 - `bun audit` — varredura de vulnerabilidades das dependências (deve continuar
   sem achados).
+- `bun run check:schema` — garante que toda tabela de unidade declara o índice
+  `by_org` (premissa do isolamento por organização e da exportação de dados).
+- `bun run loadtest --path <modulo:funcao> --args '<json>'` — teste de carga das
+  consultas. Roda só queries por padrão; mutações exigem `--allow-mutation`.
+  Precisa de `CONVEX_URL` e do JWT da sessão (`CONVEX_TOKEN`): DevTools →
+  Application → Local Storage → `__convexAuthJWT_https://<deployment>.convex.cloud`.
+  Sai com código 1 quando a taxa de erro passa de `--max-error-rate` (2%).
+- `.github/workflows/ci.yml` — instala, roda `bun audit`, o codegen do Convex
+  (quando o secret `CONVEX_DEPLOY_KEY` existe), `tsc`, `check:schema` e testes.
 
 ## 8. Operação segura no dia a dia
 

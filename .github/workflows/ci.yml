@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    name: Dependências, tipos e testes
+    runs-on: ubuntu-latest
+    env:
+      # Opcional: só roda o codegen do Convex quando o secret existir
+      # (Settings → Secrets and variables → Actions → CONVEX_DEPLOY_KEY).
+      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Instalar dependências
+        run: bun install --frozen-lockfile
+
+      - name: Varredura de vulnerabilidades
+        run: bun audit
+
+      - name: Codegen Convex
+        if: env.CONVEX_DEPLOY_KEY != ''
+        run: bun convex dev --once
+
+      - name: Checagem de tipos
+        run: bun tsc -b --noEmit
+
+      - name: Índices por organização no schema
+        run: bun run check:schema
+
+      - name: Testes
+        run: bun test

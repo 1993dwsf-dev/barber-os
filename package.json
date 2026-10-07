@@ -8,6 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "bun test",
+    "loadtest": "bun run scripts/loadtest.ts",
+    "check:schema": "bun run scripts/by-org-check.ts",
     "format": "prettier --write .",
     "preview": "vite preview"
   },
@@ -72,7 +74,8 @@
     "zod": "^4.1.13"
   },
   "overrides": {
-    "@auth/core": "^0.41.3"
+    "@auth/core": "^0.41.3",
+    "ai": "5.0.209"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
