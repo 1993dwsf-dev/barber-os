@@ -69,6 +69,7 @@ export default function Configuracoes() {
           <TabsTrigger value="equipe">Equipe</TabsTrigger>
           <TabsTrigger value="auditoria">Auditoria</TabsTrigger>
           <TabsTrigger value="dados">Dados</TabsTrigger>
+          <TabsTrigger value="backup">Backup</TabsTrigger>
         </TabsList>
 
         <TabsContent value="unidade" className="mt-4">
@@ -123,7 +124,11 @@ export default function Configuracoes() {
         </TabsContent>
 
         <TabsContent value="dados" className="mt-4">
-          <DataSection orgId={orgId} editable={editable} />
+          <DataSection orgId={orgId} editable={editable} compact />
+        </TabsContent>
+
+        <TabsContent value="backup" className="mt-4">
+          <BackupSection orgId={orgId} editable={editable} />
         </TabsContent>
       </Tabs>
 
@@ -262,7 +267,7 @@ function BusinessHoursForm({
                 setHours(hours.map((h, j) => (i === j ? { ...h, enabled: v } : h)))
               }
             />
-            <span className="w-28 text-sm text-foreground">{dayName(d.weekday)}</span>
+            <DayName weekday={d.weekday} />
             <Input
               type="time"
               className="glass-input h-8 w-32"
@@ -312,7 +317,19 @@ function BusinessHoursForm({
 }
 
 function dayName(weekday: number) {
-  return ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"][weekday] ?? "";
+  return [
+    "Domingo",
+    "Segunda",
+    "Terça",
+    "Quarta",
+    "Quinta",
+    "Sexta",
+    "Sábado",
+  ][weekday] ?? "";
+}
+
+function DayName({ weekday }: { weekday: number }) {
+  return <span className="w-28 text-sm text-foreground">{dayName(weekday)}</span>;
 }
 
 function SettingsForm({ orgId, editable }: { orgId: Id<"organizations">; editable: boolean }) {
@@ -678,11 +695,95 @@ function TeamSection({
   );
 }
 
-/**
- * Backup/portabilidade: baixa um JSON com tudo que pertence à unidade.
- * Exige permissão de configurações (owner/admin) e fica registrado na auditoria.
- */
-function DataSection({ orgId, editable }: { orgId: Id<"organizations">; editable: boolean }) {
+function DataSection({ orgId, editable, compact = false }: { orgId: Id<"organizations">; editable: boolean; compact?: boolean }) {
+  return (
+    <section className={compact ? "glass-chip rounded-2xl p-4" : "glass-chip rounded-2xl p-5"}>
+      <SectionTitle
+        title="Backup e portabilidade"
+        hint="Baixe uma cópia completa dos dados desta unidade"
+        action={<FileDown className="size-4 text-muted-foreground" />}
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <BackupButton orgId={orgId} editable={editable} />
+      </div>
+      {!compact ? (
+        <>
+          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+            O arquivo inclui clientes, agenda, vendas, caixa, despesas, estoque, pacotes,
+            assinaturas, fidelidade e trilha de auditoria. Cada exportação fica registrada na
+            auditoria com usuário e horário.
+          </p>
+          {!editable ? (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Somente proprietário e administrador podem exportar os dados.
+            </p>
+          ) : null}
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+function BackupSection({ orgId, editable }: { orgId: Id<"organizations">; editable: boolean }) {
+  return (
+    <div className="flex flex-col gap-5">
+      <section className="glass-chip rounded-2xl p-5">
+        <SectionTitle
+          title="Exportação"
+          hint="Baixe uma cópia local dos dados desta unidade"
+          action={<FileDown className="size-4 text-muted-foreground" />}
+        />
+        <BackupButton orgId={orgId} editable={editable} />
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+          O arquivo JSON inclui os registros de todas as tabelas vinculadas à unidade. Esse é o
+          seu backup portátil: use para guardar uma cópia externa, migrar ou atender pedidos de
+          portabilidade/exclusão de dados do cliente.
+        </p>
+        {!editable ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Somente proprietário e administrador podem gerar a exportação.
+          </p>
+        ) : null}
+      </section>
+
+      <section className="glass-chip rounded-2xl p-5">
+        <SectionTitle
+          title="Privacidade e LGPD"
+          hint="Documentos publicados e como atender pedidos de titulares"
+          action={<FileText className="size-4 text-muted-foreground" />}
+        />
+        <ul className="flex flex-col gap-1.5 text-[13px] text-muted-foreground">
+          <li>
+            Política de Privacidade:{" "}
+            <Link to="/privacidade" className="font-medium text-primary hover:underline">
+              /privacidade
+            </Link>
+          </li>
+          <li>
+            Termos de Uso:{" "}
+            <Link to="/termos" className="font-medium text-primary hover:underline">
+              /termos
+            </Link>
+          </li>
+        </ul>
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+          Pedidos de acesso, correção, portabilidade ou exclusão de dados de um cliente podem ser
+          atendidos aqui: gere o backup da unidade e, quando necessário, exclua o cadastro do
+          cliente em Clientes. Lembre-se de que registros financeiros e fiscais podem ter prazo
+          legal de guarda.
+        </p>
+      </section>
+    </div>
+  );
+}
+
+function BackupButton({
+  orgId,
+  editable,
+}: {
+  orgId: Id<"organizations">;
+  editable: boolean;
+}) {
   const exportData = useMutation(api.backup.exportOrganizationData);
   const [busy, setBusy] = useState(false);
 
@@ -714,63 +815,14 @@ function DataSection({ orgId, editable }: { orgId: Id<"organizations">; editable
   }
 
   return (
-    <>
-      <section className="glass-chip rounded-2xl p-5">
-        <SectionTitle
-          title="Backup e portabilidade"
-          hint="Baixe uma cópia completa dos dados desta unidade"
-          action={<FileDown className="size-4 text-muted-foreground" />}
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            className="bg-white/60"
-            disabled={!editable || busy}
-            onClick={handleExport}
-          >
-            <FileDown className="size-4" /> {busy ? "Gerando…" : "Exportar dados (JSON)"}
-          </Button>
-        </div>
-        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-          O arquivo inclui clientes, agenda, vendas, caixa, despesas, estoque, pacotes,
-          assinaturas, fidelidade e trilha de auditoria. Cada exportação fica registrada na
-          auditoria com usuário e horário.
-        </p>
-        {!editable ? (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Somente proprietário e administrador podem exportar os dados.
-          </p>
-        ) : null}
-      </section>
-
-      <section className="glass-chip mt-4 rounded-2xl p-5">
-        <SectionTitle
-          title="Privacidade e LGPD"
-          hint="Documentos publicados e como atender pedidos de titulares"
-          action={<FileText className="size-4 text-muted-foreground" />}
-        />
-        <ul className="flex flex-col gap-1.5 text-[13px] text-muted-foreground">
-          <li>
-            Política de Privacidade:{" "}
-            <Link to="/privacidade" className="font-medium text-primary hover:underline">
-              /privacidade
-            </Link>
-          </li>
-          <li>
-            Termos de Uso:{" "}
-            <Link to="/termos" className="font-medium text-primary hover:underline">
-              /termos
-            </Link>
-          </li>
-        </ul>
-        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-          Pedidos de acesso, correção, portabilidade ou exclusão de dados de um cliente podem ser
-          atendidos aqui: exporte o backup da unidade e, quando necessário, exclua o cadastro do
-          cliente em Clientes. Lembre-se de que registros financeiros e fiscais podem ter prazo
-          legal de guarda.
-        </p>
-      </section>
-    </>
+    <Button
+      variant="outline"
+      className="bg-white/60"
+      disabled={!editable || busy}
+      onClick={handleExport}
+    >
+      <FileDown className="size-4" /> {busy ? "Gerando…" : "Exportar dados (JSON)"}
+    </Button>
   );
 }
 
