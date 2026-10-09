@@ -18,6 +18,22 @@ import {
 import { text } from "./validation";
 import { todayISO } from "../lib/dates";
 
+function assertNonNegativeCents(value: number, label: string): void {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    bad(`${label} deve ser um valor inteiro, não negativo e válido.`);
+  }
+}
+
+function assertPositiveQuantity(value: number): void {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    bad("A quantidade deve ser um número inteiro maior que zero.");
+  }
+}
+
+function canOverrideFinancialValues(role: string): boolean {
+  return role === "owner" || role === "admin" || role === "manager";
+}
+
 export type SaleItemInput = {
   kind: "servico" | "produto" | "pacote" | "plano";
   refId: string;
@@ -71,6 +87,25 @@ export async function recordSale(
       "Agendamento",
     );
 
+  const membership = await ctx.db
+    .query("organizationMembers")
+    .withIndex("by_org_user", (q) =>
+      q.eq("organizationId", org._id).eq("userId", userId),
+    )
+    .first();
+
+  if (!membership) {
+    bad("Usuário não pertence a esta organização.");
+  }
+
+  const canOverride = canOverrideFinancialValues(membership.role);
+
+  assertNonNegativeCents(args.discountCents ?? 0, "Desconto");
+
+  if ((args.discountCents ?? 0) > 0 && !canOverride) {
+    bad("Somente gestores autorizados podem conceder descontos.");
+  }
+
   // Resolve itens e calcula totais
   let subtotal = 0;
   let coveredTotal = 0;
@@ -83,7 +118,8 @@ export async function recordSale(
   }> = [];
 
   for (const item of args.items) {
-    if (!Number.isFinite(item.qty) || item.qty <= 0) bad("Quantidade inválida.");
+    assertPositiveQuantity(item.qty);
+
     if (item.barberId)
       await requireSameOrg(
         await ctx.db.get(item.barberId as Id<"barbers">),
@@ -103,35 +139,95 @@ export async function recordSale(
         "Assinatura do cliente",
       );
     let name = "";
-    let unit = item.unitPriceCents ?? 0;
-    let cost = item.costCents ?? 0;
+    let catalogPrice = 0;
+    let catalogCost = 0;
+
     if (item.kind === "servico") {
       const service = await ctx.db.get(item.refId as Id<"services">);
-      if (!service || service.organizationId !== org._id) bad("Serviço não encontrado.");
-      if (!service.active) bad(`O serviço "${service.name}" está inativo.`);
+
+      if (!service || service.organizationId !== org._id) {
+        bad("Serviço não encontrado.");
+      }
+
+      if (!service.active) {
+        bad(`O serviço "${service.name}" está inativo.`);
+      }
+
       name = service.name;
-      unit = item.unitPriceCents ?? service.priceCents;
+      catalogPrice = service.priceCents;
     } else if (item.kind === "produto") {
       const product = await ctx.db.get(item.refId as Id<"products">);
-      if (!product || product.organizationId !== org._id) bad("Produto não encontrado.");
-      if (!product.active) bad(`O produto "${product.name}" está inativo.`);
-      if (product.stock < item.qty && !org.settings.allowNegativeStock)
-        bad(`Estoque insuficiente para "${product.name}" (disponível: ${product.stock}).`);
+
+      if (!product || product.organizationId !== org._id) {
+        bad("Produto não encontrado.");
+      }
+
+      if (!product.active) {
+        bad(`O produto "${product.name}" está inativo.`);
+      }
+
+      if (product.stock < item.qty && !org.settings.allowNegativeStock) {
+        bad(
+          `Estoque insuficiente para "${product.name}" (disponível: ${product.stock}).`,
+        );
+      }
+
       name = product.name;
-      unit = item.unitPriceCents ?? product.priceCents;
-      cost = product.costCents;
+      catalogPrice = product.priceCents;
+      catalogCost = product.costCents;
     } else if (item.kind === "pacote") {
       const pkg = await ctx.db.get(item.refId as Id<"packages">);
-      if (!pkg || pkg.organizationId !== org._id) bad("Pacote não encontrado.");
-      if (!pkg.active) bad(`O pacote "${pkg.name}" está inativo.`);
+
+      if (!pkg || pkg.organizationId !== org._id) {
+        bad("Pacote não encontrado.");
+      }
+
+      if (!pkg.active) {
+        bad(`O pacote "${pkg.name}" está inativo.`);
+      }
+
       name = pkg.name;
-      unit = item.unitPriceCents ?? pkg.priceCents;
+      catalogPrice = pkg.priceCents;
     } else {
-      const plan = await ctx.db.get(item.refId as Id<"membershipPlans">);
-      if (!plan || plan.organizationId !== org._id) bad("Plano não encontrado.");
-      if (!plan.active) bad(`O plano "${plan.name}" está inativo.`);
+      const plan = await ctx.db.get(
+        item.refId as Id<"membershipPlans">,
+      );
+
+      if (!plan || plan.organizationId !== org._id) {
+        bad("Plano não encontrado.");
+      }
+
+      if (!plan.active) {
+        bad(`O plano "${plan.name}" está inativo.`);
+      }
+
       name = plan.name;
-      unit = item.unitPriceCents ?? plan.priceCents;
+      catalogPrice = plan.priceCents;
+    }
+
+    // Alterações manuais de preço exigem um papel privilegiado.
+    if (item.unitPriceCents !== undefined && !canOverride) {
+      if (item.unitPriceCents !== catalogPrice) {
+        bad("Você não tem permissão para alterar o preço do catálogo.");
+      }
+    }
+
+    const unit = item.unitPriceCents ?? catalogPrice;
+    const cost = catalogCost;
+
+    assertNonNegativeCents(unit, "Preço unitário");
+    assertNonNegativeCents(cost, "Custo unitário");
+
+    const lineTotal = unit * item.qty;
+
+    if (!Number.isSafeInteger(lineTotal)) {
+      bad("O valor total do item excede o limite permitido.");
+    }
+
+    if (item.clientPackageId && item.membershipId) {
+      bad(
+        "Um serviço não pode consumir créditos de pacote e assinatura simultaneamente.",
+      );
     }
 
     const covered = Math.max(0, item.coveredByCreditCents ?? 0);
@@ -158,6 +254,9 @@ export async function recordSale(
         if (!covers) bad("Este serviço não faz parte do pacote do cliente.");
         const remaining = cp.creditsTotal - cp.creditsUsed;
         if (remaining <= 0) bad("O pacote do cliente está sem créditos.");
+        if (!args.clientId || cp.clientId !== args.clientId) {
+          bad("O pacote não pertence ao cliente desta venda.");
+        }
       }
       if (item.membershipId) {
         const m = await ctx.db.get(item.membershipId as Id<"memberships">);
@@ -167,6 +266,9 @@ export async function recordSale(
         if (!plan?.items.some((i) => i.serviceId === item.refId))
           bad("Este serviço não está incluído na assinatura do cliente.");
         if (m.creditsTotal - m.creditsUsed <= 0) bad("A assinatura do cliente está sem créditos.");
+        if (!args.clientId || m.clientId !== args.clientId) {
+          bad("A assinatura não pertence ao cliente desta venda.");
+        }
       }
     }
 
@@ -179,8 +281,24 @@ export async function recordSale(
   const discount = Math.max(0, args.discountCents ?? 0);
   if (discount > subtotal) bad("O desconto não pode ser maior que o subtotal.");
   const total = subtotal - discount;
-  const money = args.payments.reduce((s, p) => s + p.amountCents, 0);
-  if (args.payments.some((p) => p.amountCents <= 0)) bad("Informe valores de pagamento válidos.");
+
+  for (const payment of args.payments) {
+    assertNonNegativeCents(payment.amountCents, "Pagamento");
+
+    if (payment.amountCents === 0) {
+      bad("O valor de cada pagamento deve ser maior que zero.");
+    }
+  }
+
+  const money = args.payments.reduce(
+    (sum, payment) => sum + payment.amountCents,
+    0,
+  );
+
+  if (!Number.isSafeInteger(money)) {
+    bad("A soma dos pagamentos excede o limite permitido.");
+  }
+
   if (money + coveredTotal !== total)
     bad(
       `O total dos pagamentos (R$ ${(money / 100).toFixed(2)}) não confere com o total da venda (R$ ${(total / 100).toFixed(2)}).`,

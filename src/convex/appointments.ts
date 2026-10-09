@@ -360,6 +360,13 @@ export const complete = mutation({
     if (!appt || appt.organizationId !== org._id) bad("Agendamento não encontrado.");
     if (appt.status === "concluido") bad("Este atendimento já foi concluído.");
     if (appt.status === "cancelado") bad("Atendimento cancelado não pode ser concluído.");
+
+    if (args.clientPackageId && args.membershipId) {
+      bad(
+        "Escolha um pacote ou uma assinatura para este atendimento, não ambos.",
+      );
+    }
+
     const service = await ctx.db.get(appt.serviceId);
     const client = await ctx.db.get(appt.clientId);
 
