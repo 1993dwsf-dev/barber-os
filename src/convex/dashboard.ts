@@ -147,8 +147,11 @@ export const dashboard = query({
     const membershipRevenueMonth = itemRevenue(monthRows, "plano");
     const packageRevenueMonth = itemRevenue(monthRows, "pacote");
 
-    const grossProfit = revenueMonth - productCostMonth - commissionsPaid;
-    const netProfit = revenueMonth - expensesMonthTotal;
+    const grossProfit =
+      revenueMonth - productCostMonth - commissionsPaid;
+
+    const netProfit =
+      grossProfit - expensesMonthTotal;
 
     /* ---------------------- assinaturas ---------------------- */
     const memberships = await ctx.db

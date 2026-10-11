@@ -9,7 +9,7 @@ import {
   requireSameOrg,
   requireView,
 } from "./lib";
-import { text } from "./validation";
+import { dateISO, text, timeLabel } from "./validation";
 import { timeToMin, todayISO, weekdayOf } from "../lib/dates";
 import { recordSale } from "./sales";
 
@@ -56,6 +56,10 @@ function fmtTime(min: number): string {
   const h = Math.floor(min / 60);
   const m = min % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function canIgnoreBusinessHours(role: string): boolean {
+  return role === "owner" || role === "admin" || role === "manager";
 }
 
 async function assertWithinHours(
@@ -177,24 +181,39 @@ export const create = mutation({
     ignoreHours: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const { org, userId } = await requireManage(ctx, args.organizationId, "agenda");
+    const { org, userId, role } = await requireManage(ctx, args.organizationId, "agenda");
+
+    if (args.ignoreHours && !canIgnoreBusinessHours(role)) {
+      bad("Você não tem permissão para ignorar o expediente.");
+    }
+
     const service = await ctx.db.get(args.serviceId);
     if (!service || service.organizationId !== org._id) bad("Serviço não encontrado.");
     const client = await requireSameOrg(await ctx.db.get(args.clientId), org._id, "Cliente");
     await requireSameOrg(await ctx.db.get(args.barberId), org._id, "Barbeiro");
+
+    const date = dateISO(args.date, "Data do agendamento");
+    const startTime = timeLabel(args.startTime, "Horário do agendamento");
+
+    if (date < todayISO()) {
+      bad("Não é possível agendar para uma data passada.");
+    }
+
     const duration = args.durationMin ?? service.durationMin;
-    if (duration <= 0 || duration > 480) bad("Duração do atendimento inválida.");
-    if (args.date < todayISO()) bad("Não é possível agendar para uma data passada.");
+
+    if (!Number.isSafeInteger(duration) || duration <= 0 || duration > 480) {
+      bad("Duração do atendimento inválida.");
+    }
 
     await assertNoConflict(ctx, {
       organizationId: org._id,
       barberId: args.barberId,
-      date: args.date,
-      startTime: args.startTime,
+      date,
+      startTime,
       durationMin: duration,
     });
     if (!args.ignoreHours) {
-      await assertWithinHours(ctx, args.barberId, args.date, args.startTime, duration);
+      await assertWithinHours(ctx, args.barberId, date, startTime, duration);
     }
 
     const id = await ctx.db.insert("appointments", {
@@ -202,8 +221,8 @@ export const create = mutation({
       clientId: args.clientId,
       barberId: args.barberId,
       serviceId: args.serviceId,
-      date: args.date,
-      startTime: args.startTime,
+      date,
+      startTime,
       durationMin: duration,
       priceCents: args.priceCents ?? service.priceCents,
       status: args.status ?? "agendado",
@@ -219,7 +238,7 @@ export const create = mutation({
       module: "Agenda",
       recordType: "appointments",
       recordId: id,
-      summary: `Agendamento de ${client.name} (${service.name}) em ${args.date} ${args.startTime}`,
+      summary: `Agendamento de ${client.name} (${service.name}) em ${date} ${startTime}`,
     });
     return id;
   },
@@ -239,14 +258,26 @@ export const update = mutation({
     ignoreHours: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const { org, userId } = await requireManage(ctx, args.organizationId, "agenda");
+    const { org, userId, role } = await requireManage(ctx, args.organizationId, "agenda");
+
+    if (args.ignoreHours && !canIgnoreBusinessHours(role)) {
+      bad("Você não tem permissão para ignorar o expediente.");
+    }
+
     const appt = await ctx.db.get(args.appointmentId);
     if (!appt || appt.organizationId !== org._id) bad("Agendamento não encontrado.");
     if (appt.status === "concluido") bad("Atendimento concluído não pode ser alterado.");
     const barberId = args.barberId ?? appt.barberId;
-    const date = args.date ?? appt.date;
-    const startTime = args.startTime ?? appt.startTime;
+    const date = dateISO(args.date ?? appt.date, "Data do agendamento");
+    const startTime = timeLabel(args.startTime ?? appt.startTime, "Horário do agendamento");
     const duration = args.durationMin ?? appt.durationMin;
+
+    if (!Number.isSafeInteger(duration) || duration <= 0 || duration > 480) {
+      bad("Duração do atendimento inválida.");
+    }
+    if (args.date && date < todayISO()) {
+      bad("Não é possível mover o agendamento para uma data passada.");
+    }
     if (args.barberId) await requireSameOrg(await ctx.db.get(args.barberId), org._id, "Barbeiro");
     if (args.serviceId) await requireSameOrg(await ctx.db.get(args.serviceId), org._id, "Serviço");
     const service = args.serviceId ? await ctx.db.get(args.serviceId) : await ctx.db.get(appt.serviceId);
