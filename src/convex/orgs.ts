@@ -145,10 +145,24 @@ export function sanitizeSettings(input: unknown): Record<string, unknown> {
   return out;
 }
 
-function randomCode(len = 6): string {
+function randomCode(len = 12): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const max = 256 - (256 % alphabet.length);
   let out = "";
-  for (let i = 0; i < len; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
+
+  while (out.length < len) {
+    const bytes = new Uint8Array(len * 2);
+    crypto.getRandomValues(bytes);
+
+    for (const byte of bytes) {
+      if (byte >= max) continue;
+
+      out += alphabet[byte % alphabet.length];
+
+      if (out.length === len) break;
+    }
+  }
+
   return out;
 }
 
@@ -215,6 +229,24 @@ export const createOrganization = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
+
+    const user = await ctx.db.get(userId as Id<"users">);
+
+    if (!user) {
+      bad("Não foi possível validar sua conta. Entre novamente.");
+    }
+
+    if (
+      user.isAnonymous ||
+      !user.email ||
+      !user.emailVerificationTime
+    ) {
+      bad(
+        "Para criar uma barbearia, confirme seu e-mail e use uma conta recuperável. " +
+          "Você pode continuar explorando o modo de demonstração.",
+      );
+    }
+
     await enforceRateLimit(ctx, userId, "createOrganization");
     const now = Date.now();
     const name = requiredText(args.name, "name", "Nome da barbearia");
@@ -381,11 +413,13 @@ export const joinByInviteCode = mutation({
   args: { code: v.string() },
   handler: async (ctx, { code }) => {
     const userId = await requireUserId(ctx);
-    // O código tem 6 caracteres: sem limite, um atacante poderia varrer o
-    // espaço de códigos de todas as unidades.
+    // Códigos de convite têm 12 caracteres (gerados com crypto-
+    // getRandomValues); os antigos de 6 continuam aceitos durante a
+    // transição. Sem limite, um atacante poderia varrer o espaço de códigos
+    // de todas as unidades.
     await enforceRateLimit(ctx, userId, "joinByInviteCode");
     const normalized = code.trim().toUpperCase();
-    if (!/^[A-Z0-9]{4,8}$/.test(normalized)) bad("Código de convite inválido.");
+    if (!/^[A-Z0-9]{4,12}$/.test(normalized)) bad("Código de convite inválido.");
     const org = await ctx.db
       .query("organizations")
       .withIndex("by_invite", (q) => q.eq("inviteCode", normalized))
