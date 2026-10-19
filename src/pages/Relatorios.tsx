@@ -101,8 +101,6 @@ export default function Relatorios() {
                   ["Receita", real(s?.revenueCents ?? 0)],
                   ["Receita de serviços", real(s?.serviceRevenue ?? 0)],
                   ["Receita de produtos", real(s?.productRevenue ?? 0)],
-                  ["Receita de pacotes", real(s?.packageRevenue ?? 0)],
-                  ["Receita de assinaturas", real(s?.membershipRevenue ?? 0)],
                   ["Custo dos produtos", real(s?.productCost ?? 0)],
                   ["Despesas", real(s?.expensesCents ?? 0)],
                   ["Comissões accruadas", real(s?.commissionsAccruedCents ?? 0)],
@@ -174,15 +172,9 @@ export default function Relatorios() {
             <StatCard label="Ticket médio" value={brl(s.averageTicket)} hint={`${s.salesCount} venda(s)`} />
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
             <StatCard label="Serviços" value={brl(s.serviceRevenue)} />
             <StatCard label="Produtos" value={brl(s.productRevenue)} hint={`Margem ${brl(s.productMarginCents)}`} />
-            <StatCard label="Pacotes" value={brl(s.packageRevenue)} />
-            <StatCard
-              label="Assinaturas"
-              value={brl(s.membershipRevenue)}
-              hint={`${s.activeMemberships} ativas · MRR ${brl(s.mrrCents)}`}
-            />
           </div>
 
           <div className="grid gap-4 xl:grid-cols-2">
