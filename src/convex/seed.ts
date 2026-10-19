@@ -234,58 +234,6 @@ export async function seedDemoData(
     clientIds.push(id);
   }
 
-  /* --------------------------- pacotes e planos --------------------------- */
-  const packageIds: Id<"packages">[] = [];
-  const pkgDefs = [
-    { name: "Pacote 10 Cortes", price: 38000, validity: 180, items: [{ service: 0, sessions: 10 }] },
-    { name: "Pacote 5 Cortes + 3 Barbas", price: 34000, validity: 150, items: [{ service: 0, sessions: 5 }, { service: 2, sessions: 3 }] },
-    { name: "Combo Mensal Premium", price: 26000, validity: 90, items: [{ service: 3, sessions: 4 }] },
-  ];
-  for (const p of pkgDefs) {
-    const id = await ctx.db.insert("packages", {
-      organizationId,
-      name: p.name,
-      description: "Válido para o cliente e seus serviços inclusos.",
-      priceCents: p.price,
-      validityDays: p.validity,
-      items: p.items.map((it) => ({ serviceId: serviceIds[it.service], sessions: it.sessions })),
-      active: true,
-      createdAt: now,
-      updatedAt: now,
-    });
-    packageIds.push(id);
-  }
-
-  const planIds: Id<"membershipPlans">[] = [];
-  const planDefs = [
-    {
-      name: "Clube Essencial",
-      price: 9900,
-      items: [{ service: 0, credits: 2 }, { service: 2, credits: 1 }],
-      benefits: ["2 cortes por mês", "1 barba terapia", "10% off em produtos"],
-    },
-    {
-      name: "Clube Premium",
-      price: 16900,
-      items: [{ service: 0, credits: 4 }, { service: 2, credits: 2 }, { service: 6, credits: 1 }],
-      benefits: ["4 cortes", "2 barbas", "hidratação mensal", "15% off em produtos", "Agendamento prioritário"],
-    },
-  ];
-  for (const p of planDefs) {
-    const id = await ctx.db.insert("membershipPlans", {
-      organizationId,
-      name: p.name,
-      description: "Assinatura mensal com créditos de serviços.",
-      priceCents: p.price,
-      items: p.items.map((it) => ({ serviceId: serviceIds[it.service], credits: it.credits })),
-      benefits: p.benefits,
-      active: true,
-      createdAt: now,
-      updatedAt: now,
-    });
-    planIds.push(id);
-  }
-
   // Totais de caixa acumulados em memória: o seed relia os movimentos de cada
   // sessão no fim do dia (um scan por dia de operação dentro da transação).
   const cashInBySession = new Map<Id<"cashSessions">, number>();
@@ -323,7 +271,7 @@ export async function seedDemoData(
     barberId?: Id<"barbers">;
     appointmentId?: Id<"appointments">;
     items: Array<{
-      kind: "servico" | "produto" | "pacote" | "plano";
+      kind: "servico" | "produto";
       name: string;
       qty: number;
       unit: number;
@@ -331,18 +279,12 @@ export async function seedDemoData(
       barberId?: Id<"barbers">;
       serviceId?: Id<"services">;
       productId?: Id<"products">;
-      packageId?: Id<"packages">;
-      planId?: Id<"membershipPlans">;
-      clientPackageId?: Id<"clientPackages">;
-      membershipId?: Id<"memberships">;
-      covered?: number;
     }>;
     paymentMethod?: "dinheiro" | "debito" | "credito" | "pix";
     sessionId?: Id<"cashSessions">;
-  }): Promise<{ saleId: Id<"sales">; total: number; covered: number }> => {
+  }): Promise<{ saleId: Id<"sales">; total: number }> => {
     const subtotal = args.items.reduce((s, i) => s + i.unit * i.qty, 0);
-    const covered = args.items.reduce((s, i) => s + (i.covered ?? 0), 0);
-    const moneyDue = Math.max(0, subtotal - covered);
+    const moneyDue = subtotal;
     const cost = args.items.reduce((s, i) => s + (i.cost ?? 0) * i.qty, 0);
     saleNumber += 1;
     const saleId = await ctx.db.insert("sales", {
@@ -367,17 +309,13 @@ export async function seedDemoData(
         kind: item.kind,
         serviceId: item.serviceId,
         productId: item.productId,
-        packageId: item.packageId,
-        planId: item.planId,
         appointmentId: args.appointmentId,
-        clientPackageId: item.clientPackageId,
-        membershipId: item.membershipId,
         name: item.name,
         quantity: item.qty,
         unitPriceCents: item.unit,
         totalCents: item.unit * item.qty,
         costCents: (item.cost ?? 0) * item.qty,
-        coveredByCreditCents: item.covered ?? 0,
+        coveredByCreditCents: 0,
         barberId: item.barberId,
       });
       if (item.kind === "produto" && item.productId) {
@@ -486,7 +424,7 @@ export async function seedDemoData(
         }
       }
     }
-    return { saleId, total: subtotal, covered };
+    return { saleId, total: subtotal };
   };
 
   const PAYMENT_WEIGHTS: Array<["dinheiro" | "debito" | "credito" | "pix", number]> = [
@@ -504,85 +442,6 @@ export async function seedDemoData(
     }
     return "pix" as const;
   };
-
-  /* --------------------------- pacotes / assinaturas / clientes associados --------------------------- */
-  const clientPackageMap = new Map<string, Id<"clientPackages">>();
-  for (let i = 0; i < 12; i++) {
-    const clientId = clientIds[i];
-    const pkgIdx = i % packageIds.length;
-    const def = pkgDefs[pkgIdx];
-    const purchaseDate = addDaysISO(today, -rint(5, 120));
-    const creditsTotal = def.items.reduce((s, it) => s + it.sessions, 0);
-    const creditsUsed = rint(0, Math.max(1, creditsTotal - 2));
-    const expired = i === 11;
-    const expiryDate = addDaysISO(purchaseDate, def.validity);
-    const status = expired || expiryDate < today ? "expirado" : creditsUsed >= creditsTotal ? "esgotado" : "ativo";
-    const sale = await createSale({
-      date: purchaseDate,
-      time: "12:00",
-      clientId,
-      items: [
-        {
-          kind: "pacote",
-          name: def.name,
-          qty: 1,
-          unit: def.price,
-          packageId: packageIds[pkgIdx],
-        },
-      ],
-      paymentMethod: pickPayment(),
-    });
-    const cpId = await ctx.db.insert("clientPackages", {
-      organizationId,
-      clientId,
-      packageId: packageIds[pkgIdx],
-      purchaseDate,
-      expiryDate,
-      creditsTotal,
-      creditsUsed,
-      pricePaidCents: def.price,
-      status,
-      saleId: sale.saleId,
-      createdAt: now,
-    });
-    clientPackageMap.set(`${clientId}:${pkgIdx}`, cpId);
-  }
-
-  const membershipMap = new Map<string, Id<"memberships">>();
-  for (let i = 0; i < 9; i++) {
-    const clientId = clientIds[(i + 12) % clientIds.length];
-    const planIdx = i % planIds.length;
-    const def = planDefs[planIdx];
-    const startDate = addDaysISO(today, -rint(20, 90));
-    const renewalDate = addDaysISO(startDate, 30 * rint(1, 3));
-    const creditsTotal = def.items.reduce((s, it) => s + it.credits, 0);
-    const creditsUsed = rint(0, Math.max(1, creditsTotal - 1));
-    const status = i === 8 ? "cancelada" : i === 7 ? "pausada" : "ativa";
-    if (status !== "cancelada") {
-      await createSale({
-        date: startDate,
-        time: "10:30",
-        clientId,
-        items: [{ kind: "plano", name: def.name, qty: 1, unit: def.price, planId: planIds[planIdx] }],
-        paymentMethod: pickPayment(),
-      });
-    }
-    const mId = await ctx.db.insert("memberships", {
-      organizationId,
-      clientId,
-      planId: planIds[planIdx],
-      startDate,
-      renewalDate,
-      status,
-      creditsTotal,
-      creditsUsed,
-      priceCents: def.price,
-      billingStatus: "em_dia",
-      cancelledAt: status === "cancelada" ? now : undefined,
-      createdAt: now,
-    });
-    membershipMap.set(`${clientId}:${planIdx}`, mId);
-  }
 
   /* --------------------------- agenda histórica + futura --------------------------- */
   const feedbackPool: Array<{ barberId: Id<"barbers">; serviceId: Id<"services">; rating: number; comment: string }> = [
@@ -626,41 +485,7 @@ export async function seedDemoData(
     });
 
     if (args.status === "concluido") {
-      // tenta usar crédito de pacote / assinatura
-      let covered = 0;
-      let clientPackageId: Id<"clientPackages"> | undefined;
-      let membershipId: Id<"memberships"> | undefined;
-
-      const cpId = clientPackageMap.get(`${args.clientId}:${args.serviceIndex % packageIds.length}`);
-      if (cpId && chance(0.6)) {
-        const cp = await ctx.db.get(cpId);
-        if (cp && cp.status === "ativo" && cp.creditsUsed < cp.creditsTotal && cp.expiryDate >= args.date) {
-          covered = service.price;
-          clientPackageId = cp._id;
-          await ctx.db.patch(cp._id, {
-            creditsUsed: cp.creditsUsed + 1,
-            status: cp.creditsUsed + 1 >= cp.creditsTotal ? "esgotado" : "ativo",
-          });
-        }
-      }
-      if (!covered) {
-        for (const [key, mId] of membershipMap.entries()) {
-          if (!key.startsWith(`${args.clientId}:`)) continue;
-          const m = await ctx.db.get(mId);
-          const plan = m ? await ctx.db.get(m.planId) : null;
-          if (
-            m && plan && m.status === "ativa" && m.creditsUsed < m.creditsTotal &&
-            plan.items.some((it) => it.serviceId === service.id)
-          ) {
-            covered = service.price;
-            membershipId = m._id;
-            await ctx.db.patch(m._id, { creditsUsed: m.creditsUsed + 1 });
-            break;
-          }
-        }
-      }
-
-      const extraProduct = !covered && chance(0.22) ? rint(0, PRODUCTS.length - 1) : -1;
+      const extraProduct = chance(0.22) ? rint(0, PRODUCTS.length - 1) : -1;
       const productDoc = extraProduct >= 0 ? await ctx.db.get(productIds[extraProduct]) : null;
       const canSell = productDoc && productDoc.stock > 0;
 
@@ -678,9 +503,6 @@ export async function seedDemoData(
             unit: service.price,
             barberId: args.barberId,
             serviceId: service.id,
-            clientPackageId,
-            membershipId,
-            covered,
           },
           ...(canSell
             ? [
@@ -695,7 +517,7 @@ export async function seedDemoData(
               ]
             : []),
         ],
-        paymentMethod: covered > 0 && !canSell ? undefined : pickPayment(),
+        paymentMethod: pickPayment(),
         sessionId: args.sessionId,
       });
 
@@ -1029,37 +851,6 @@ export async function seedDemoData(
         });
         followupCount++;
       }
-    }
-  }
-  for (const mId of membershipMap.values()) {
-    const m = await ctx.db.get(mId);
-    if (!m || m.status !== "ativa") continue;
-    const daysTo = Math.round(
-      (Date.parse(`${m.renewalDate}T00:00:00-03:00`) - Date.parse(`${today}T00:00:00-03:00`)) / 86_400_000,
-    );
-    if (daysTo <= 10) {
-      await ctx.db.insert("followups", {
-        organizationId,
-        clientId: m.clientId,
-        reason: "renovacao",
-        title: "Renovar assinatura",
-        notes: `Assinatura renova em ${daysTo} dias.`,
-        ownerId: responsible,
-        dueDate: addDaysISO(today, Math.min(daysTo, 5)),
-        priority: daysTo <= 3 ? "alta" : "media",
-        status: "pendente",
-        createdAt: now,
-      });
-    }
-    if (daysTo <= 10) {
-      await notify(ctx, organizationId, {
-        type: "renovacao",
-        title: "Assinatura próxima da renovação",
-        message: "Uma assinatura vence em até 10 dias.",
-        severity: daysTo <= 3 ? "alerta" : "info",
-        dedupKey: `renovacao:${m._id}`,
-        link: "/app/assinaturas",
-      });
     }
   }
 
