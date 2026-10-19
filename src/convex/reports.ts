@@ -124,36 +124,6 @@ export const bundle = query({
       active: p.active,
     }));
 
-    const memberships = await ctx.db
-      .query("memberships")
-      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
-      .collect();
-    const membershipRows = [];
-    for (const m of memberships) {
-      const [client, plan] = await Promise.all([ctx.db.get(m.clientId), ctx.db.get(m.planId)]);
-      membershipRows.push({
-        ...m,
-        clientName: client?.name ?? "—",
-        planName: plan?.name ?? "—",
-        creditsRemaining: Math.max(0, m.creditsTotal - m.creditsUsed),
-      });
-    }
-
-    const clientPackages = await ctx.db
-      .query("clientPackages")
-      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
-      .collect();
-    const packageRows = [];
-    for (const cp of clientPackages) {
-      const [client, pkg] = await Promise.all([ctx.db.get(cp.clientId), ctx.db.get(cp.packageId)]);
-      packageRows.push({
-        ...cp,
-        clientName: client?.name ?? "—",
-        packageName: pkg?.name ?? "—",
-        creditsRemaining: Math.max(0, cp.creditsTotal - cp.creditsUsed),
-      });
-    }
-
     const clients = await ctx.db
       .query("clients")
       .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
@@ -187,8 +157,6 @@ export const bundle = query({
       );
     const serviceRevenue = byKind("servico");
     const productRevenue = byKind("produto");
-    const packageRevenue = byKind("pacote");
-    const membershipRevenue = byKind("plano");
     const productCost = saleRows.reduce(
       (s, r) => s + r.items.filter((i) => i.kind === "produto").reduce((a, i) => a + i.costCents, 0),
       0,
@@ -265,8 +233,6 @@ export const bundle = query({
         revenueCents,
         serviceRevenue,
         productRevenue,
-        packageRevenue,
-        membershipRevenue,
         productCost,
         productMarginCents: productRevenue - productCost,
         expensesCents,
@@ -285,8 +251,6 @@ export const bundle = query({
           appointmentRows.filter((a) => a.status === "concluido").length > 0
             ? Math.round((productCost + commissionsAccruedCents) / appointmentRows.filter((a) => a.status === "concluido").length)
             : 0,
-        activeMemberships: memberships.filter((m) => m.status === "ativa").length,
-        mrrCents: memberships.filter((m) => m.status === "ativa").reduce((s, m) => s + m.priceCents, 0),
         inventoryCostValue: inventoryRows.reduce((s, p) => s + p.costValueCents, 0),
         inventoryRetailValue: inventoryRows.reduce((s, p) => s + p.retailValueCents, 0),
         activeClients: clients.filter((c) => c.status === "ativo").length,
@@ -297,8 +261,6 @@ export const bundle = query({
       expenses,
       commissions: commissionRows,
       inventory: inventoryRows,
-      memberships: membershipRows,
-      packages: packageRows,
       clients: clientRows,
       aggregates: {
         revenueByDay: [...revenueByDayMap.entries()]
