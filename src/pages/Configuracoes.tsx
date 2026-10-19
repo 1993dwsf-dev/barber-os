@@ -581,6 +581,7 @@ function TeamSection({
   isOwner: boolean;
   canEditSettings: boolean;
 }) {
+  const members = useQuery(api.orgs.listMembers, { organizationId: orgId });
   const barbers = useQuery(api.barbers.list, { organizationId: orgId, includeInactive: true });
   const updateRole = useMutation(api.orgs.updateMemberRole);
   const removeMember = useMutation(api.orgs.removeMember);

@@ -63,6 +63,8 @@ export default function Caixa() {
   );
   const openSession = useMutation(api.cash.openSession);
   const closeSession = useMutation(api.cash.closeSession);
+  const addMovement = useMutation(api.cash.addMovement);
+  const add = addMovement;
 
   if (!orgId) return <Loading />;
 
