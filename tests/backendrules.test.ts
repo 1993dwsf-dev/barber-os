@@ -325,3 +325,59 @@ test("venda com crédito de pacote e assinatura no mesmo item é rejeitada", asy
     }),
   ).rejects.toThrow(/pacote e assinatura/i);
 });
+
+test("venda rejeita quantidade maior que os créditos restantes do pacote", async () => {
+  const owner = await seedOwner();
+  const cat = await seedCatalog(owner);
+  const packageId = await owner.t2.mutation(api.catalog.createPackage, {
+    organizationId: owner.orgId,
+    name: "Pacote de dois cortes",
+    priceCents: 9000,
+    validityDays: 30,
+    items: [{ serviceId: cat.serviceId, sessions: 2 }],
+  });
+
+  await owner.t2.mutation(api.catalog.buyPackage, {
+    organizationId: owner.orgId,
+    clientId: cat.clientId,
+    packageId,
+    payments: [{ method: "pix", amountCents: 9000 }],
+  });
+
+  const clientPackage = await t.run(async (ctx) =>
+    ctx.db
+      .query("clientPackages")
+      .withIndex("by_org", (q) => q.eq("organizationId", owner.orgId))
+      .first(),
+  );
+  expect(clientPackage).not.toBeNull();
+
+  await owner.t2.mutation(api.sales.createSale, {
+    organizationId: owner.orgId,
+    clientId: cat.clientId,
+    items: [{
+      kind: "servico",
+      refId: cat.serviceId,
+      qty: 1,
+      coveredByCreditCents: 5000,
+      clientPackageId: clientPackage!._id,
+    }],
+    payments: [],
+  });
+
+  await expect(
+    owner.t2.mutation(api.sales.createSale, {
+      organizationId: owner.orgId,
+      clientId: cat.clientId,
+      items: [{
+        kind: "servico",
+        refId: cat.serviceId,
+        qty: 2,
+        coveredByCreditCents: 10000,
+        clientPackageId: clientPackage!._id,
+      }],
+      payments: [],
+    }),
+  ).rejects.toThrow(/créditos suficientes/i);
+});
+
