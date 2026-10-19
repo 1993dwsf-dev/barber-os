@@ -80,8 +80,6 @@ export const RBAC: Matrix = {
       "clients",
       "team",
       "catalog",
-      "packages",
-      "memberships",
       "products",
       "inventory",
       "loyalty",
