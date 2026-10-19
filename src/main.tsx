@@ -23,8 +23,6 @@ const ClienteDetalhe = lazy(() => import("./pages/ClienteDetalhe.tsx"));
 const Equipe = lazy(() => import("./pages/Equipe.tsx"));
 const BarbeiroDetalhe = lazy(() => import("./pages/BarbeiroDetalhe.tsx"));
 const Servicos = lazy(() => import("./pages/Servicos.tsx"));
-const Pacotes = lazy(() => import("./pages/Pacotes.tsx"));
-const Assinaturas = lazy(() => import("./pages/Assinaturas.tsx"));
 const Produtos = lazy(() => import("./pages/Produtos.tsx"));
 const Pdv = lazy(() => import("./pages/Pdv.tsx"));
 const Caixa = lazy(() => import("./pages/Caixa.tsx"));
@@ -178,8 +176,6 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/app/equipe" element={<Protected><Equipe /></Protected>} />
               <Route path="/app/barbeiros/:id" element={<Protected><BarbeiroDetalhe /></Protected>} />
               <Route path="/app/servicos" element={<Protected><Servicos /></Protected>} />
-              <Route path="/app/pacotes" element={<Protected><Pacotes /></Protected>} />
-              <Route path="/app/assinaturas" element={<Protected><Assinaturas /></Protected>} />
               <Route path="/app/produtos" element={<Protected><Produtos /></Protected>} />
               <Route path="/app/estoque" element={<Navigate to="/app/produtos" replace />} />
               <Route path="/app/despesas" element={<Protected><Despesas /></Protected>} />
