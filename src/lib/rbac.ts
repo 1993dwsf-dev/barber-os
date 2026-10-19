@@ -23,8 +23,6 @@ export const CAPS = [
   "clients",
   "team",
   "catalog",
-  "packages",
-  "memberships",
   "products",
   "inventory",
   "pos",
@@ -77,7 +75,7 @@ export const RBAC: Matrix = {
       "inventory",
       "loyalty",
     ],
-    manage: ["agenda", "clients", "pos", "cash", "packages", "memberships", "crm"],
+    manage: ["agenda", "clients", "pos", "cash", "crm"],
   },
   viewer: {
     view: [
