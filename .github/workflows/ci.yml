@@ -15,9 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
-    env:
-      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,15 +27,8 @@ jobs:
       - name: Instalar dependências
         run: bun install --frozen-lockfile
 
-      - name: Verificar configuração do Convex
-        run: |
-          if [ -z "$CONVEX_DEPLOY_KEY" ]; then
-            echo "::error::Configure o secret CONVEX_DEPLOY_KEY em Settings > Secrets and variables > Actions."
-            exit 1
-          fi
-
-      - name: Gerar tipos do Convex
-        run: bunx convex dev --once
+      - name: Gerar tipos do Convex (sem deployment remoto)
+        run: bunx convex codegen
 
       - name: Auditoria de dependências
         run: bun audit
