@@ -334,7 +334,6 @@ export async function recordSale(
     createdBy: userId,
   });
 
-  let commissionTotal = 0;
   const hasService = resolved.some((r) => r.input.kind === "servico");
 
   for (const r of resolved) {
@@ -405,7 +404,6 @@ export async function recordSale(
             status: "pendente",
             createdAt: Date.now(),
           });
-          commissionTotal += calc.amount;
         }
       }
     }

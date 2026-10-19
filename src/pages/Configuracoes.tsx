@@ -43,7 +43,6 @@ export default function Configuracoes() {
   const { orgId, org, role, canEdit } = useOrg();
   const [tab, setTab] = useState("unidade");
 
-  const members = useQuery(api.orgs.listMembers, orgId ? { organizationId: orgId } : "skip");
   const audit = useQuery(
     api.notifications.listAudit,
     orgId ? { organizationId: orgId, limit: 80 } : "skip",
@@ -582,7 +581,6 @@ function TeamSection({
   isOwner: boolean;
   canEditSettings: boolean;
 }) {
-  const members = useQuery(api.orgs.listMembers, { organizationId: orgId });
   const barbers = useQuery(api.barbers.list, { organizationId: orgId, includeInactive: true });
   const updateRole = useMutation(api.orgs.updateMemberRole);
   const removeMember = useMutation(api.orgs.removeMember);

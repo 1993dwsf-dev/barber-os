@@ -62,7 +62,6 @@ export default function Caixa() {
     orgId ? { organizationId: orgId, limit: 20 } : "skip",
   );
   const openSession = useMutation(api.cash.openSession);
-  const addMovement = useMutation(api.cash.addMovement);
   const closeSession = useMutation(api.cash.closeSession);
 
   if (!orgId) return <Loading />;
@@ -391,7 +390,6 @@ function MovementDialog({
   onSaved: () => void;
 }) {
   const { orgId } = useOrg();
-  const add = useMutation(api.cash.addMovement);
   const [type, setType] = useState<"entrada" | "saida" | "retirada">("entrada");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");

@@ -305,7 +305,7 @@ export async function seedDemoData(
 
   /* --------------------------- vendas / comissões / fidelidade --------------------------- */
   let saleNumber = org.salesCount;
-  let clientStats = new Map<string, { visits: number; spent: number; last: string }>();
+  const clientStats = new Map<string, { visits: number; spent: number; last: string }>();
 
   const bumpClient = (clientId: string, cents: number, visit: boolean, date: string) => {
     const prev = clientStats.get(clientId) ?? { visits: 0, spent: 0, last: "" };

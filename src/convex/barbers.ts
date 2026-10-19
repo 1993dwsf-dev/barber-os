@@ -1,6 +1,5 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
 import { audit, bad, requireManage, requireSameOrg, requireView } from "./lib";
 import { dateISO, hexColor, requiredText, text, timeLabel } from "./validation";
 

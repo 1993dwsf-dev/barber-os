@@ -32,7 +32,6 @@ type Owner = {
   orgId: Id<"organizations">;
 };
 
-const today = (offsetDays = 0): string => {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
   return d.toISOString().slice(0, 10);
@@ -146,7 +145,6 @@ async function seedCatalog(owner: Owner) {
 
 /** Resolve o HttpError lançado pelas funções (bad()/requireX) via Bun? Não —
  * via Convex: erros de função chegam como ConvexError genérico no convex-test. */
-function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 

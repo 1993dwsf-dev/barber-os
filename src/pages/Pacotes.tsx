@@ -35,7 +35,6 @@ import {
   fmtDate,
   reaisToCents,
 } from "@/lib/format";
-import { todayISO } from "@/lib/dates";
 import { useOrg } from "@/lib/org-context";
 
 type PayLine = { method: "dinheiro" | "debito" | "credito" | "pix"; amountCents: number };
