@@ -10,12 +10,10 @@ import {
   Boxes,
   CalendarDays,
   ChevronDown,
-  CreditCard,
   HandCoins,
   LayoutDashboard,
   LogOut,
   Menu,
-  Package,
   Percent,
   Plus,
   Receipt,
@@ -83,8 +81,6 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: "Catálogo",
     items: [
       { to: "/app/servicos", label: "Serviços", icon: Scissors, cap: "catalog" },
-      { to: "/app/pacotes", label: "Pacotes", icon: Package, cap: "packages" },
-      { to: "/app/assinaturas", label: "Assinaturas", icon: CreditCard, cap: "memberships" },
       { to: "/app/produtos", label: "Produtos e estoque", icon: Boxes, cap: "products" },
     ],
   },
@@ -209,8 +205,7 @@ function GlobalSearch() {
         <div className="scrollbar-slim max-h-80 overflow-y-auto p-1.5">
           {term.trim().length < 2 ? (
             <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-              A busca cobre clientes, barbeiros, serviços, produtos, pacotes, planos e
-              agendamentos de hoje.
+              A busca cobre clientes, barbeiros, serviços, produtos e agendamentos de hoje.
             </p>
           ) : results === undefined ? (
             <Loading label="Buscando" />
