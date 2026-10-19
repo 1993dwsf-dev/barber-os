@@ -27,8 +27,8 @@ jobs:
       - name: Instalar dependências
         run: bun install --frozen-lockfile
 
-      - name: Gerar tipos do Convex (sem deployment remoto)
-        run: bunx convex codegen
+      - name: Configurar backend Convex local e gerar tipos
+        run: bunx convex dev --once
 
       - name: Auditoria de dependências
         run: bun audit
