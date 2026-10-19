@@ -14,6 +14,10 @@ jobs:
     name: Lint, tipos, testes e build
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # Mesmo valor padrão declarado em src/convex/auth.config.ts.
+      # Evita falha ao validar auth.config no deployment local do CI.
+      VLY_CONVEX_AUTH_ISSUER: https://freebuff.com
 
     steps:
       - name: Checkout
