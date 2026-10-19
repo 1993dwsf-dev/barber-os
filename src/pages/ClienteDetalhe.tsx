@@ -10,7 +10,6 @@ import {
   Phone,
   Save,
   Star,
-  Ticket,
   TrendingUp,
   Users,
 } from "lucide-react";
@@ -151,7 +150,6 @@ export default function ClienteDetalhe() {
           <TabsList className="glass-chip">
             <TabsTrigger value="agenda">Agendamentos</TabsTrigger>
             <TabsTrigger value="vendas">Vendas</TabsTrigger>
-            <TabsTrigger value="pacotes">Pacotes</TabsTrigger>
             <TabsTrigger value="fidelidade">Fidelidade</TabsTrigger>
           </TabsList>
 
@@ -206,71 +204,6 @@ export default function ClienteDetalhe() {
             )}
           </TabsContent>
 
-          <TabsContent value="pacotes" className="mt-4 flex flex-col gap-4">
-            <div>
-              <p className="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground">
-                Pacotes de serviços
-              </p>
-              {data.packages.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Nenhum pacote ativo.</p>
-              ) : (
-                <ul className="flex flex-col gap-1.5">
-                  {data.packages.map(({ clientPackage, package: pkg }) => (
-                    <li key={clientPackage._id} className="rounded-xl glass-chip px-3 py-2 text-[13px]">
-                      <div className="flex items-center gap-2">
-                        <Ticket className="size-3.5 text-primary" />
-                        <span className="min-w-0 flex-1 truncate text-foreground">
-                          {pkg?.name ?? "Pacote"}
-                        </span>
-                        <Tone className="glass-chip text-muted-foreground">
-                          {clientPackage.creditsTotal - clientPackage.creditsUsed}/
-                          {clientPackage.creditsTotal} créditos
-                        </Tone>
-                      </div>
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">
-                        Comprado em {fmtDate(clientPackage.purchaseDate)} · validade até{" "}
-                        {fmtDate(clientPackage.expiryDate)}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div>
-              <p className="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground">
-                Assinaturas
-              </p>
-              {data.memberships.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Nenhuma assinatura.</p>
-              ) : (
-                <ul className="flex flex-col gap-1.5">
-                  {data.memberships.map(({ membership, plan }) => (
-                    <li key={membership._id} className="rounded-xl glass-chip px-3 py-2 text-[13px]">
-                      <div className="flex items-center gap-2">
-                        <span className="min-w-0 flex-1 truncate text-foreground">
-                          {plan?.name ?? "Plano"}
-                        </span>
-                        <Tone
-                          className={
-                            membership.status === "ativa"
-                              ? "border-emerald-200 bg-emerald-100 text-emerald-700"
-                              : "border-zinc-200 bg-zinc-100 text-zinc-600"
-                          }
-                        >
-                          {membership.status}
-                        </Tone>
-                      </div>
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">
-                        {brl(membership.priceCents)}/mês · renova em{" "}
-                        {fmtDate(membership.renewalDate)} ·{" "}
-                        {Math.max(0, membership.creditsTotal - membership.creditsUsed)} créditos
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </TabsContent>
 
           <TabsContent value="fidelidade" className="mt-4">
             {data.loyaltyTransactions.length === 0 ? (
