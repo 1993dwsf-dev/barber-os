@@ -110,7 +110,7 @@ export const profile = query({
     const client = await ctx.db.get(clientId);
     if (!client || client.organizationId !== organizationId) bad("Cliente não encontrado.");
 
-    const [appointments, sales, memberships, clientPackages, followups, feedback] =
+    const [appointments, sales, followups, feedback] =
       await Promise.all([
         ctx.db
           .query("appointments")
@@ -124,18 +124,7 @@ export const profile = query({
             q.eq("organizationId", organizationId).eq("clientId", clientId),
           )
           .collect(),
-        ctx.db
-          .query("memberships")
-          .withIndex("by_org_client", (q) =>
-            q.eq("organizationId", organizationId).eq("clientId", clientId),
-          )
-          .collect(),
-        ctx.db
-          .query("clientPackages")
-          .withIndex("by_org_client", (q) =>
-            q.eq("organizationId", organizationId).eq("clientId", clientId),
-          )
-          .collect(),
+
         ctx.db
           .query("followups")
           .withIndex("by_org_client", (q) =>
@@ -209,17 +198,6 @@ export const profile = query({
       }
     }
 
-    const membershipDetails = [];
-    for (const m of memberships) {
-      const plan = await ctx.db.get(m.planId);
-      membershipDetails.push({ membership: m, plan });
-    }
-    const packageDetails = [];
-    for (const cp of clientPackages) {
-      const pkg = await ctx.db.get(cp.packageId);
-      packageDetails.push({ clientPackage: cp, package: pkg });
-    }
-
     return {
       client: {
         ...client,
@@ -227,8 +205,6 @@ export const profile = query({
       },
       appointments: appointmentDetails,
       sales: saleDetails,
-      memberships: membershipDetails,
-      packages: packageDetails,
       followups: followups.sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
       feedback: clientFeedback.sort((a, b) => b.createdAt - a.createdAt),
       notes: notes.sort((a, b) => b.createdAt - a.createdAt),
