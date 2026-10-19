@@ -202,7 +202,7 @@ export async function ensureLoyaltyAccount(
   return (await ctx.db.get(id))!;
 }
 
-/** Premia pontos por dinheiro real pago (exclui pagamentos com crédito de pacote/assinatura). */
+/** Premia pontos com base no valor efetivamente pago em dinheiro. */
 export async function awardLoyalty(
   ctx: MutationCtx,
   org: Doc<"organizations">,
