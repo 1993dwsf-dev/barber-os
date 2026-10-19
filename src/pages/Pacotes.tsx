@@ -37,10 +37,9 @@ import {
 } from "@/lib/format";
 import { useOrg } from "@/lib/org-context";
 
-type PayLine = { method: "dinheiro" | "debito" | "credito" | "pix"; amountCents: number };
 
 export default function Pacotes() {
-  const { orgId, canEdit, org } = useOrg();
+  const { orgId, canEdit } = useOrg();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Id<"packages"> | null>(null);
 

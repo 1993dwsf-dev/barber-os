@@ -15,6 +15,7 @@ import {
   Users,
 } from "lucide-react";
 import { useState } from "react";
+import { useParams, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -347,8 +348,10 @@ export default function ClienteDetalhe() {
               <KeyValue label="Cadastrado em">
                 {new Date(c.createdAt).toLocaleDateString("pt-BR")}
               </KeyValue>
-              <KeyValue label="Follow-ups abertos">
-                {data.followups.filter((f) => f.status === "pendente" || f.status === "em_andamento").length}
+              <KeyValue label="Follow-ups abertos">              {data.followups.filter((f) =>
+                f.status === "pendente" || f.status === "em_andamento"
+              ).length}
+
               </KeyValue>
             </div>
           </section>

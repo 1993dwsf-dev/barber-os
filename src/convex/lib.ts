@@ -2,6 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { todayISO } from "../lib/dates";
+import { type AppRole, type Cap, canView, canManage } from "../lib/rbac";
 
 export class HttpError extends Error {}
 
