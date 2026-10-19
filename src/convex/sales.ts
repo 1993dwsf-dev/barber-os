@@ -35,15 +35,12 @@ function canOverrideFinancialValues(role: string): boolean {
 }
 
 export type SaleItemInput = {
-  kind: "servico" | "produto" | "pacote" | "plano";
+  kind: "servico" | "produto";
   refId: string;
   qty: number;
   unitPriceCents?: number;
   costCents?: number;
   barberId?: string;
-  coveredByCreditCents?: number;
-  clientPackageId?: string;
-  membershipId?: string;
 };
 
 export type PaymentInput = {
@@ -54,7 +51,7 @@ export type PaymentInput = {
 /**
  * Motor de vendas: valida, grava venda/itens/pagamentos e dispara TODOS os efeitos
  * colaterais (estoque, comissões, fidelidade, caixa, histórico do cliente).
- * Usado pelo PDV, pela conclusão de atendimento e por compras de pacotes/assinaturas.
+ * Usado pelo PDV e pela conclusão de atendimento.
  */
 export async function recordSale(
   ctx: MutationCtx,
@@ -108,7 +105,6 @@ export async function recordSale(
 
   // Resolve itens e calcula totais
   let subtotal = 0;
-  let coveredTotal = 0;
   let costTotal = 0;
   const resolved: Array<{
     input: SaleItemInput;
@@ -125,18 +121,6 @@ export async function recordSale(
         await ctx.db.get(item.barberId as Id<"barbers">),
         org._id,
         "Barbeiro",
-      );
-    if (item.clientPackageId)
-      await requireSameOrg(
-        await ctx.db.get(item.clientPackageId as Id<"clientPackages">),
-        org._id,
-        "Pacote do cliente",
-      );
-    if (item.membershipId)
-      await requireSameOrg(
-        await ctx.db.get(item.membershipId as Id<"memberships">),
-        org._id,
-        "Assinatura do cliente",
       );
     let name = "";
     let catalogPrice = 0;
@@ -175,34 +159,6 @@ export async function recordSale(
       name = product.name;
       catalogPrice = product.priceCents;
       catalogCost = product.costCents;
-    } else if (item.kind === "pacote") {
-      const pkg = await ctx.db.get(item.refId as Id<"packages">);
-
-      if (!pkg || pkg.organizationId !== org._id) {
-        bad("Pacote não encontrado.");
-      }
-
-      if (!pkg.active) {
-        bad(`O pacote "${pkg.name}" está inativo.`);
-      }
-
-      name = pkg.name;
-      catalogPrice = pkg.priceCents;
-    } else {
-      const plan = await ctx.db.get(
-        item.refId as Id<"membershipPlans">,
-      );
-
-      if (!plan || plan.organizationId !== org._id) {
-        bad("Plano não encontrado.");
-      }
-
-      if (!plan.active) {
-        bad(`O plano "${plan.name}" está inativo.`);
-      }
-
-      name = plan.name;
-      catalogPrice = plan.priceCents;
     }
 
     // Alterações manuais de preço exigem um papel privilegiado.
@@ -224,56 +180,7 @@ export async function recordSale(
       bad("O valor total do item excede o limite permitido.");
     }
 
-    if (item.clientPackageId && item.membershipId) {
-      bad(
-        "Um serviço não pode consumir créditos de pacote e assinatura simultaneamente.",
-      );
-    }
-
-    const covered = Math.max(0, item.coveredByCreditCents ?? 0);
-    if (covered > unit * item.qty) bad("Crédito aplicado maior que o valor do item.");
-
-    if (item.kind === "produto") {
-      const product = await ctx.db.get(item.refId as Id<"products">);
-      if (product) {
-        // valida crédito de pacote/assinatura quando aplicável
-        if (covered > 0) bad("Crédito de pacote não se aplica a produtos.");
-      }
-    }
-    if (covered > 0) {
-      if (item.kind !== "servico") bad("Crédito de pacote só se aplica a serviços.");
-      if (!item.clientPackageId && !item.membershipId)
-        bad("Informe de onde vem o crédito usado neste serviço.");
-      if (item.clientPackageId) {
-        const cp = await ctx.db.get(item.clientPackageId as Id<"clientPackages">);
-        if (!cp || cp.organizationId !== org._id) bad("Pacote do cliente não encontrado.");
-        if (cp.status !== "ativo") bad("Este pacote do cliente não está ativo.");
-        if (cp.expiryDate < args.date) bad("Pacote do cliente vencido.");
-        const pkg = await ctx.db.get(cp.packageId);
-        const covers = pkg?.items.some((i) => i.serviceId === item.refId);
-        if (!covers) bad("Este serviço não faz parte do pacote do cliente.");
-        const remaining = cp.creditsTotal - cp.creditsUsed;
-        if (remaining < item.qty) bad("O pacote do cliente não tem créditos suficientes para esta quantidade.");
-        if (!args.clientId || cp.clientId !== args.clientId) {
-          bad("O pacote não pertence ao cliente desta venda.");
-        }
-      }
-      if (item.membershipId) {
-        const m = await ctx.db.get(item.membershipId as Id<"memberships">);
-        if (!m || m.organizationId !== org._id) bad("Assinatura do cliente não encontrada.");
-        if (m.status !== "ativa") bad("A assinatura do cliente não está ativa.");
-        const plan = await ctx.db.get(m.planId);
-        if (!plan?.items.some((i) => i.serviceId === item.refId))
-          bad("Este serviço não está incluído na assinatura do cliente.");
-        if (m.creditsTotal - m.creditsUsed < item.qty) bad("A assinatura do cliente não tem créditos suficientes para esta quantidade.");
-        if (!args.clientId || m.clientId !== args.clientId) {
-          bad("A assinatura não pertence ao cliente desta venda.");
-        }
-      }
-    }
-
     subtotal += unit * item.qty;
-    coveredTotal += covered;
     costTotal += cost * item.qty;
     resolved.push({ input: item, name, unit, cost });
   }
@@ -299,7 +206,7 @@ export async function recordSale(
     bad("A soma dos pagamentos excede o limite permitido.");
   }
 
-  if (money + coveredTotal !== total)
+  if (money !== total)
     bad(
       `O total dos pagamentos (R$ ${(money / 100).toFixed(2)}) não confere com o total da venda (R$ ${(total / 100).toFixed(2)}).`,
     );
@@ -345,17 +252,13 @@ export async function recordSale(
       kind: item.kind,
       serviceId: item.kind === "servico" ? (item.refId as Id<"services">) : undefined,
       productId: item.kind === "produto" ? (item.refId as Id<"products">) : undefined,
-      packageId: item.kind === "pacote" ? (item.refId as Id<"packages">) : undefined,
-      planId: item.kind === "plano" ? (item.refId as Id<"membershipPlans">) : undefined,
       appointmentId: args.appointmentId as Id<"appointments"> | undefined,
-      clientPackageId: item.clientPackageId as Id<"clientPackages"> | undefined,
-      membershipId: item.membershipId as Id<"memberships"> | undefined,
       name: r.name,
       quantity: item.qty,
       unitPriceCents: r.unit,
       totalCents: r.unit * item.qty,
       costCents: r.cost * item.qty,
-      coveredByCreditCents: item.coveredByCreditCents ?? 0,
+      coveredByCreditCents: 0,
       barberId: item.barberId as Id<"barbers"> | undefined,
     });
 
@@ -410,23 +313,6 @@ export async function recordSale(
       }
     }
 
-    // consumo de créditos
-    if (item.coveredByCreditCents && item.coveredByCreditCents > 0) {
-      if (item.clientPackageId) {
-        const cp = await ctx.db.get(item.clientPackageId as Id<"clientPackages">);
-        if (cp) {
-          const used = cp.creditsUsed + item.qty;
-          await ctx.db.patch(cp._id, {
-            creditsUsed: used,
-            status: used >= cp.creditsTotal ? "esgotado" : "ativo",
-          });
-        }
-      }
-      if (item.membershipId) {
-        const m = await ctx.db.get(item.membershipId as Id<"memberships">);
-        if (m) await ctx.db.patch(m._id, { creditsUsed: m.creditsUsed + item.qty });
-      }
-    }
   }
 
   for (const p of args.payments) {
@@ -476,17 +362,12 @@ export const createSale = mutation({
         kind: v.union(
           v.literal("servico"),
           v.literal("produto"),
-          v.literal("pacote"),
-          v.literal("plano"),
         ),
         refId: v.string(),
         qty: v.number(),
         unitPriceCents: v.optional(v.number()),
         costCents: v.optional(v.number()),
         barberId: v.optional(v.id("barbers")),
-        coveredByCreditCents: v.optional(v.number()),
-        clientPackageId: v.optional(v.id("clientPackages")),
-        membershipId: v.optional(v.id("memberships")),
       }),
     ),
     payments: v.array(
