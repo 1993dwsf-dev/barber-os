@@ -253,7 +253,7 @@ export async function recordSale(
         const covers = pkg?.items.some((i) => i.serviceId === item.refId);
         if (!covers) bad("Este serviço não faz parte do pacote do cliente.");
         const remaining = cp.creditsTotal - cp.creditsUsed;
-        if (remaining <= 0) bad("O pacote do cliente está sem créditos.");
+        if (remaining < item.qty) bad("O pacote do cliente não tem créditos suficientes para esta quantidade.");
         if (!args.clientId || cp.clientId !== args.clientId) {
           bad("O pacote não pertence ao cliente desta venda.");
         }
@@ -265,7 +265,7 @@ export async function recordSale(
         const plan = await ctx.db.get(m.planId);
         if (!plan?.items.some((i) => i.serviceId === item.refId))
           bad("Este serviço não está incluído na assinatura do cliente.");
-        if (m.creditsTotal - m.creditsUsed <= 0) bad("A assinatura do cliente está sem créditos.");
+        if (m.creditsTotal - m.creditsUsed < item.qty) bad("A assinatura do cliente não tem créditos suficientes para esta quantidade.");
         if (!args.clientId || m.clientId !== args.clientId) {
           bad("A assinatura não pertence ao cliente desta venda.");
         }
