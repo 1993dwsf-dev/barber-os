@@ -63,8 +63,6 @@ export default function Caixa() {
   );
   const openSession = useMutation(api.cash.openSession);
   const closeSession = useMutation(api.cash.closeSession);
-  const addMovement = useMutation(api.cash.addMovement);
-  const add = addMovement;
 
   if (!orgId) return <Loading />;
 
@@ -397,6 +395,7 @@ function MovementDialog({
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const add = useMutation(api.cash.addMovement);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

@@ -27,6 +27,12 @@ jobs:
         with:
           bun-version: latest
 
+      # Vitest 5 exige Node >= 22.12; o runner traz Node 20 por padrão.
+      - name: Instalar Node 22 (Vitest)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Instalar dependências
         run: bun install --frozen-lockfile
 
@@ -52,8 +58,11 @@ jobs:
       - name: Validar índices por organização
         run: bun run check:schema
 
-      - name: Executar testes
-        run: bun test
+      - name: Executar testes (Bun)
+        run: bun run test:unit
+
+      - name: Executar testes de backend (Vitest)
+        run: bun run test:backend
 
       - name: Build de produção
         run: bun run build

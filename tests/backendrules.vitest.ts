@@ -92,8 +92,8 @@ async function seedStaff(owner: Owner, role: "barber" | "cashier" | "viewer") {
     ),
   });
   if (role !== "barber") {
-    // joinByInviteCode entra como barber; promote via owner
-    await t2.mutation(api.orgs.updateMemberRole, {
+    // joinByInviteCode entra como barber; a promoção exige o proprietário
+    await owner.t2.mutation(api.orgs.updateMemberRole, {
       organizationId: owner.orgId,
       memberId: await t.run(async (ctx) => {
         const m = await ctx.db
