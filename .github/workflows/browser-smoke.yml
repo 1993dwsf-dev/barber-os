@@ -1,0 +1,86 @@
+name: Browser smoke (Convex isolado)
+on:
+  pull_request:
+    branches: [audit/p0-financial-security]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  e2e:
+    name: Visitante, demo, agenda, PDV, caixa e mobile
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependências e Chromium
+        run: |
+          bun install --frozen-lockfile
+          python -m pip install playwright==1.56.0
+          python -m playwright install --with-deps chromium
+      - name: Navegar na aplicação com banco local descartável
+        timeout-minutes: 12
+        env:
+          SMOKE_BASE_URL: http://127.0.0.1:5173
+        run: |
+          set -euo pipefail
+          bunx convex dev > /tmp/convex-browser-smoke.log 2>&1 &
+          CONVEX_PID=$!
+          VITE_PID=""
+          MAIL_PID=""
+          trap 'kill "$CONVEX_PID" 2>/dev/null || true; if [ -n "$VITE_PID" ]; then kill "$VITE_PID" 2>/dev/null || true; fi; if [ -n "$MAIL_PID" ]; then kill "$MAIL_PID" 2>/dev/null || true; fi' EXIT
+          ready=0
+          for i in $(seq 1 90); do
+            if [ -f .env.local ] && grep -q "VITE_CONVEX_URL=" .env.local && grep -q "Convex functions ready" /tmp/convex-browser-smoke.log; then ready=1; break; fi
+            if ! kill -0 "$CONVEX_PID" 2>/dev/null; then tail -n 150 /tmp/convex-browser-smoke.log; exit 1; fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then echo "Convex local não iniciou"; tail -n 150 /tmp/convex-browser-smoke.log; exit 1; fi
+          # Chaves efêmeras: apenas o Convex local deste job, nunca produção.
+          node <<'NODE'
+          const { generateKeyPairSync } = require("node:crypto");
+          const { writeFileSync } = require("node:fs");
+          const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+          writeFileSync("/tmp/barber-jwt-private", privateKey.export({ type: "pkcs8", format: "pem" }), { mode: 0o600 });
+          writeFileSync("/tmp/barber-jwks", JSON.stringify({ keys: [{ ...publicKey.export({ format: "jwk" }), use: "sig", alg: "RS256" }] }), { mode: 0o600 });
+          NODE
+          cat /tmp/barber-jwt-private | bunx convex env set JWT_PRIVATE_KEY
+          bunx convex env set JWKS "$(cat /tmp/barber-jwks)"
+          bunx convex env set SITE_URL "http://127.0.0.1:5173"
+          rm -f /tmp/barber-jwt-private /tmp/barber-jwks
+          python scripts/fake_otp_gateway.py > /tmp/barber-mail-e2e.log 2>&1 &
+          MAIL_PID=$!
+          bunx convex env set VLY_INTEGRATION_BASE_URL "http://127.0.0.1:8765"
+          bunx convex env set VLY_INTEGRATION_KEY "local-smoke-only"
+          bun run dev -- --host 127.0.0.1 > /tmp/vite-browser-smoke.log 2>&1 &
+          VITE_PID=$!
+          ready=0
+          for i in $(seq 1 45); do
+            if curl --silent --fail --output /dev/null http://127.0.0.1:5173/auth; then ready=1; break; fi
+            if ! kill -0 "$VITE_PID" 2>/dev/null; then tail -n 150 /tmp/vite-browser-smoke.log; exit 1; fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then echo "Vite não iniciou"; tail -n 150 /tmp/vite-browser-smoke.log; exit 1; fi
+          python scripts/browser_smoke.py
+      - name: Logs em caso de falha
+        if: failure()
+        run: |
+          tail -n 150 /tmp/convex-browser-smoke.log || true
+          tail -n 150 /tmp/vite-browser-smoke.log || true
+          echo "---- OTP gateway (sem conteúdo do código) ----"
+          cat /tmp/barber-otp-diagnostic.json || true
+          tail -n 30 /tmp/barber-mail-e2e.log || true
+      - name: Capturas e evidências
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-smoke
+          path: artifacts/browser-smoke/
+          if-no-files-found: ignore
+          retention-days: 7

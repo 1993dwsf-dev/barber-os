@@ -6,10 +6,7 @@ import {
   BarChart3,
   CalendarClock,
   Boxes,
-  CreditCard,
   MessageCircle,
-  Package,
-  Repeat,
   Scissors,
   ShieldCheck,
   Sparkles,
@@ -39,7 +36,7 @@ const MODULES: { icon: LucideIcon; title: string; text: string }[] = [
   {
     icon: Users,
     title: "CRM de clientes",
-    text: "Ficha completa, histórico, tags, fidelidade, pacotes e assinaturas por cliente.",
+    text: "Ficha completa, histórico, tags e pontos de fidelidade por cliente.",
   },
   {
     icon: Wallet,
@@ -47,9 +44,9 @@ const MODULES: { icon: LucideIcon; title: string; text: string }[] = [
     text: "Venda de serviços e produtos, pagamento misto e baixa automática de estoque.",
   },
   {
-    icon: Repeat,
-    title: "Pacotes e assinaturas",
-    text: "Créditos consumidos no atendimento e receita recorrente previsível todo mês.",
+    icon: Users,
+    title: "Equipe e comissões",
+    text: "Gestão de profissionais, atendimentos e comissões por serviço.",
   },
   {
     icon: Boxes,
@@ -77,14 +74,14 @@ const HIGHLIGHTS = [
   {
     icon: MessageCircle,
     title: "Relacionamento que retém",
-    text: "Follow-ups automáticos por inatividade, aniversário e renovação de assinatura.",
+    text: "Acompanhamento de clientes, lembretes de aniversário e contatos de relacionamento.",
   },
 ];
 
 const STEPS = [
   { n: "01", title: "Crie sua unidade", text: "Nome, endereço, horário de funcionamento e catálogo base." },
   { n: "02", title: "Cadastre a equipe", text: "Barbeiros com agenda e modelo de comissão próprio." },
-  { n: "03", title: "Popule clientes", text: "Histórico, tags, pacotes e assinaturas prontos para atendimento." },
+  { n: "03", title: "Popule clientes", text: "Histórico, preferências e fidelidade prontos para atendimento." },
   { n: "04", title: "Trabalhe", text: "Agenda, PDV e caixa operam juntos desde o primeiro dia." },
 ];
 
@@ -223,7 +220,7 @@ export default function Landing() {
                 {[
                   { icon: CalendarClock, label: "Atendimentos hoje", value: "18", tone: "text-primary bg-primary/10" },
                   { icon: Wallet, label: "Ticket médio", value: "R$ 86,00", tone: "text-emerald-700 bg-emerald-500/12" },
-                  { icon: Star, label: "Assinaturas ativas", value: "64", tone: "text-amber-700 bg-amber-500/14" },
+                  { icon: Star, label: "Clientes fidelizados", value: "64", tone: "text-amber-700 bg-amber-500/14" },
                 ].map((kpi) => (
                   <div key={kpi.label} className="flex items-center gap-3 rounded-2xl bg-white/55 p-4">
                     <span className={`flex size-9 items-center justify-center rounded-xl ${kpi.tone}`}>
@@ -378,7 +375,7 @@ export default function Landing() {
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground">
                 Comece com o ambiente demo e conheça o BarberFlow OS com dados de uma
-                barbearia real, ou crie a sua unidade em menos de dois minutos.
+                barbearia fictícia, ou crie a sua unidade em menos de dois minutos.
               </p>
               <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
                 <Button asChild size="lg" className="h-11 rounded-xl px-6">
@@ -399,8 +396,8 @@ export default function Landing() {
               <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
                 {[
                   { icon: BadgePercent, label: "Comissões por modelo" },
-                  { icon: Package, label: "Pacotes e créditos" },
-                  { icon: CreditCard, label: "Assinaturas recorrentes" },
+                  { icon: CalendarClock, label: "Agenda integrada" },
+                  { icon: Wallet, label: "Caixa e pagamentos" },
                 ].map((f) => (
                   <span key={f.label} className="flex items-center gap-1.5">
                     <f.icon className="size-3.5 text-primary" />
