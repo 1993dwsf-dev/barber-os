@@ -1,5 +1,7 @@
 """Testes de navegador do Barber OS com backend local e dados fictícios."""
 import datetime as dt
+import json
+import time
 import os
 import pathlib
 import re
@@ -106,7 +108,38 @@ def run():
             page.goto(BASE + "/app", wait_until="domcontentloaded")
             expect(page.locator("main").first).to_be_visible(timeout=30000)
             shot(page, "08-painel-mobile")
-            print("BROWSER_SMOKE_PASS - visitante, demo, agenda, venda PIX, caixa, mobile")
+            stage = "cadastro-email-otp"
+            email_page = browser.new_page(viewport={"width": 1366, "height": 768}, locale="pt-BR")
+            email_page.goto(BASE + "/auth", wait_until="domcontentloaded")
+            expect(email_page.locator("#auth-email")).to_be_visible(timeout=30000)
+            test_email = "qa-barber-browser@example.test"
+            email_page.locator("#auth-email").fill(test_email)
+            email_page.get_by_role("button", name="Enviar código").click()
+            expect(email_page.get_by_role("heading", name="Confira seu e-mail")).to_be_visible(timeout=40000)
+            otp_file = pathlib.Path("/tmp/barber-smoke-otp.json")
+            deadline = time.monotonic() + 30
+            code = None
+            while time.monotonic() < deadline:
+                if otp_file.is_file():
+                    payload = json.loads(otp_file.read_text())
+                    if payload.get("to") == test_email:
+                        code = payload.get("otp")
+                        break
+                time.sleep(0.2)
+            if not isinstance(code, str) or len(code) != 6:
+                raise AssertionError("Gateway de e-mail local não recebeu o OTP fictício")
+            email_page.locator('input[autocomplete="one-time-code"]').fill(code)
+            email_page.get_by_role("button", name="Verificar código").click()
+            email_page.wait_for_url(re.compile(r"/onboarding(?:[?#].*)?$"), timeout=60000)
+            expect(email_page.get_by_role("button", name="Criar barbearia")).to_be_visible(timeout=20000)
+            shot(email_page, "09-email-validado")
+            stage = "cadastro-barbearia"
+            email_page.locator("#ob-name").fill("Barbearia de Homologação E2E")
+            email_page.get_by_role("button", name="Criar barbearia").click()
+            email_page.wait_for_url(re.compile(r"/app/configuracoes(?:[?#].*)?$"), timeout=45000)
+            expect(email_page.get_by_role("heading", name="Configurações").first).to_be_visible(timeout=30000)
+            shot(email_page, "10-barbearia-criada")
+            print("BROWSER_SMOKE_PASS - visitante, demo, agenda, venda PIX, caixa, mobile, OTP simulado e cadastro")
             if errors:
                 print("Exceções Javascript:", *errors[:8], sep="\n - ")
         except Exception:
@@ -115,7 +148,7 @@ def run():
             if errors:
                 print("Erros JS:", *errors[:10], sep="\n - ", file=sys.stderr)
             try:
-                shot(page, "falha")
+                shot(email_page if stage.startswith("cadastro-") else page, "falha")
             except Exception:
                 pass
             raise
