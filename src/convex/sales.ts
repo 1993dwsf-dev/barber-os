@@ -414,7 +414,10 @@ export const listSales = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requireView(ctx, args.organizationId, "pos");
+    const { role, member } = await requireView(ctx, args.organizationId, "pos");
+    // Barbeiros só podem consultar vendas vinculadas ao seu próprio perfil.
+    // Sem vínculo explícito com um barbeiro, não exibimos o histórico financeiro.
+    if (role === "barber" && !member.barberId) return [];
     const limit = args.limit ?? 50;
     let sales = await ctx.db
       .query("sales")
@@ -423,6 +426,7 @@ export const listSales = query({
       .take(400);
 
     sales = sales.filter((s) => {
+      if (role === "barber" && s.barberId !== member.barberId) return false;
       if (args.from && s.date < args.from) return false;
       if (args.to && s.date > args.to) return false;
       if (args.clientId && s.clientId !== args.clientId) return false;
@@ -452,9 +456,13 @@ export const listSales = query({
 export const saleDetail = query({
   args: { organizationId: v.id("organizations"), saleId: v.id("sales") },
   handler: async (ctx, { organizationId, saleId }) => {
-    await requireView(ctx, organizationId, "pos");
+    const { role, member } = await requireView(ctx, organizationId, "pos");
     const sale = await ctx.db.get(saleId);
-    if (!sale || sale.organizationId !== organizationId) bad("Venda não encontrada.");
+    if (
+      !sale ||
+      sale.organizationId !== organizationId ||
+      (role === "barber" && (!member.barberId || sale.barberId !== member.barberId))
+    ) bad("Venda não encontrada.");
     const items = await ctx.db
       .query("saleItems")
       .withIndex("by_sale", (q) => q.eq("saleId", saleId))

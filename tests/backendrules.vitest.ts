@@ -349,3 +349,57 @@ test("barbeiro consulta o PDV e operador de caixa acessa PDV e caixa", async () 
   });
   expect(cashierSession).toBeNull();
 });
+test("barbeiro só enxerga vendas vinculadas ao seu perfil", async () => {
+  const owner = await seedOwner();
+  const { serviceId, barberId } = await seedCatalog(owner);
+  const staff = await seedStaff(owner, "barber");
+
+  const assignedSale = await owner.t2.mutation(api.sales.createSale, {
+    organizationId: owner.orgId,
+    barberId,
+    items: [{ kind: "servico", refId: serviceId, qty: 1, barberId }],
+    payments: [{ method: "pix", amountCents: 5000 }],
+  });
+  const unassignedSale = await owner.t2.mutation(api.sales.createSale, {
+    organizationId: owner.orgId,
+    items: [{ kind: "servico", refId: serviceId, qty: 1 }],
+    payments: [{ method: "pix", amountCents: 5000 }],
+  });
+
+  expect(
+    await staff.t2.query(api.sales.listSales, { organizationId: owner.orgId }),
+  ).toEqual([]);
+  await expect(
+    staff.t2.query(api.sales.saleDetail, {
+      organizationId: owner.orgId,
+      saleId: assignedSale.saleId,
+    }),
+  ).rejects.toThrow(/não encontrada/i);
+
+  await t.run(async (ctx) => {
+    const member = await ctx.db
+      .query("organizationMembers")
+      .withIndex("by_org_user", (q) =>
+        q.eq("organizationId", owner.orgId).eq("userId", staff.userId),
+      )
+      .first();
+    await ctx.db.patch(member!._id, { barberId });
+  });
+
+  const visible = await staff.t2.query(api.sales.listSales, {
+    organizationId: owner.orgId,
+  });
+  expect(visible.map((sale) => sale._id)).toEqual([assignedSale.saleId]);
+  const detail = await staff.t2.query(api.sales.saleDetail, {
+    organizationId: owner.orgId,
+    saleId: assignedSale.saleId,
+  });
+  expect(detail.sale._id).toBe(assignedSale.saleId);
+
+  await expect(
+    staff.t2.query(api.sales.saleDetail, {
+      organizationId: owner.orgId,
+      saleId: unassignedSale.saleId,
+    }),
+  ).rejects.toThrow(/não encontrada/i);
+});
