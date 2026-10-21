@@ -73,6 +73,9 @@ jobs:
         run: |
           tail -n 150 /tmp/convex-browser-smoke.log || true
           tail -n 150 /tmp/vite-browser-smoke.log || true
+          echo "---- OTP gateway (sem conteúdo do código) ----"
+          cat /tmp/barber-otp-diagnostic.json || true
+          tail -n 30 /tmp/barber-mail-e2e.log || true
       - name: Capturas e evidências
         if: always()
         uses: actions/upload-artifact@v4
