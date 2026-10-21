@@ -13,7 +13,7 @@ import {
   requireUserId,
 } from "./lib";
 import { APP_ROLES, type AppRole, type Cap } from "../lib/rbac";
-import { clearRateLimit, enforceRateLimit } from "./rateLimit";
+import { clearRateLimit, consumeRateLimit, enforceRateLimit } from "./rateLimit";
 import { requiredText, text } from "./validation";
 import { seedDemoData } from "./seed";
 
@@ -411,40 +411,50 @@ export const regenerateInviteCode = mutation({
 
 export const joinByInviteCode = mutation({
   args: { code: v.string() },
-  handler: async (ctx, { code }) => {
+  handler: async (ctx, { code }): Promise<
+    { ok: true; organizationId: Id<"organizations"> } | { ok: false; error: string }
+  > => {
     const userId = await requireUserId(ctx);
-    // Códigos de convite têm 12 caracteres (gerados com crypto-
-    // getRandomValues); os antigos de 6 continuam aceitos durante a
-    // transição. Sem limite, um atacante poderia varrer o espaço de códigos
-    // de todas as unidades.
-    await enforceRateLimit(ctx, userId, "joinByInviteCode");
+
+    // Convex reverte toda a transação quando uma mutação lança um erro.
+    // Rejeições de convite devem retornar um resultado, para persistir
+    // a tentativa e impedir força bruta de códigos de acesso.
+    const limitError = await consumeRateLimit(ctx, userId, "joinByInviteCode");
+    if (limitError) return { ok: false, error: limitError };
+
     const normalized = code.trim().toUpperCase();
-    if (!/^[A-Z0-9]{4,12}$/.test(normalized)) bad("Código de convite inválido.");
+    if (!/^[A-Z0-9]{4,12}$/.test(normalized)) {
+      return { ok: false, error: "Código de convite inválido." };
+    }
+
     const org = await ctx.db
       .query("organizations")
       .withIndex("by_invite", (q) => q.eq("inviteCode", normalized))
       .first();
-    if (!org) bad("Código de convite inválido.");
-    await clearRateLimit(ctx, userId, "joinByInviteCode");
+    if (!org) return { ok: false, error: "Código de convite inválido." };
+
     const existing = await ctx.db
       .query("organizationMembers")
       .withIndex("by_org_user", (q) =>
         q.eq("organizationId", org._id).eq("userId", userId as Id<"users">),
       )
       .first();
-    if (existing) return org._id;
-    await ctx.db.insert("organizationMembers", {
-      organizationId: org._id,
-      userId: userId as Id<"users">,
-      role: "barber",
-      createdAt: Date.now(),
-    });
-    await audit(ctx, org._id, userId, {
-      action: "entrou",
-      module: "Equipe",
-      summary: "Novo membro entrou via código de convite",
-    });
-    return org._id;
+
+    if (!existing) {
+      await ctx.db.insert("organizationMembers", {
+        organizationId: org._id,
+        userId: userId as Id<"users">,
+        role: "barber",
+        createdAt: Date.now(),
+      });
+      await audit(ctx, org._id, userId, {
+        action: "entrou",
+        module: "Equipe",
+        summary: "Novo membro entrou via código de convite",
+      });
+    }
+    await clearRateLimit(ctx, userId, "joinByInviteCode");
+    return { ok: true, organizationId: org._id };
   },
 });
 

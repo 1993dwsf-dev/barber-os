@@ -74,8 +74,12 @@ export default function Onboarding() {
     setBusy(true);
     setError(null);
     try {
-      const orgId = await joinByInviteCode({ code: code.trim().toUpperCase() });
-      select(orgId);
+      const result = await joinByInviteCode({ code: code.trim().toUpperCase() });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      select(result.organizationId);
       toast.success("Você entrou na unidade!");
       navigate("/app");
     } catch (err) {

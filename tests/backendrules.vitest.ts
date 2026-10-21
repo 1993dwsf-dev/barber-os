@@ -240,3 +240,112 @@ test("venda com pagamento zero é rejeitada na mutação real", async () => {
   ).rejects.toThrow(/pagamento/i);
 });
 
+test("limite de convites bloqueia tentativas incorretas e persiste os registros", async () => {
+  const owner = await seedOwner();
+
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const result = await owner.t2.mutation(api.orgs.joinByInviteCode, {
+      code: `INVALIDO${attempt}`,
+    });
+    expect(result).toEqual({ ok: false, error: "Código de convite inválido." });
+  }
+
+  const attempts = await t.run((ctx) =>
+    ctx.db
+      .query("rateLimits")
+      .withIndex("by_key", (q) =>
+        q.eq("key", `joinByInviteCode:${owner.userId}`),
+      )
+      .collect(),
+  );
+  expect(attempts).toHaveLength(10);
+
+  const blocked = await owner.t2.mutation(api.orgs.joinByInviteCode, {
+    code: (await t.run((ctx) => ctx.db.get(owner.orgId)))!.inviteCode,
+  });
+  expect(blocked.ok).toBe(false);
+  if (!blocked.ok) expect(blocked.error).toMatch(/muitas tentativas/i);
+});
+
+test("convite válido libera a janela de tentativas do usuário", async () => {
+  const owner = await seedOwner();
+  const invalid = await owner.t2.mutation(api.orgs.joinByInviteCode, { code: "ERRADO123" });
+  expect(invalid.ok).toBe(false);
+
+  const code = (await t.run((ctx) => ctx.db.get(owner.orgId)))!.inviteCode;
+  const valid = await owner.t2.mutation(api.orgs.joinByInviteCode, { code });
+  expect(valid).toEqual({ ok: true, organizationId: owner.orgId });
+
+  const attempts = await t.run((ctx) =>
+    ctx.db
+      .query("rateLimits")
+      .withIndex("by_key", (q) =>
+        q.eq("key", `joinByInviteCode:${owner.userId}`),
+      )
+      .collect(),
+  );
+  expect(attempts).toHaveLength(0);
+});
+
+test("caixa rejeita valores fracionários em centavos na abertura, movimentos e fechamento", async () => {
+  const owner = await seedOwner();
+  await expect(
+    owner.t2.mutation(api.cash.openSession, {
+      organizationId: owner.orgId,
+      openingBalanceCents: 100.5,
+    }),
+  ).rejects.toThrow(/centavos/i);
+
+  await owner.t2.mutation(api.cash.openSession, {
+    organizationId: owner.orgId,
+    openingBalanceCents: 100,
+  });
+
+  await expect(
+    owner.t2.mutation(api.cash.addMovement, {
+      organizationId: owner.orgId,
+      type: "entrada",
+      amountCents: 1.5,
+      description: "Valor inválido",
+    }),
+  ).rejects.toThrow(/centavos/i);
+
+  await expect(
+    owner.t2.mutation(api.cash.closeSession, {
+      organizationId: owner.orgId,
+      countedCents: 100.5,
+    }),
+  ).rejects.toThrow(/centavos/i);
+
+  const session = await owner.t2.query(api.cash.currentSession, {
+    organizationId: owner.orgId,
+  });
+  expect(session?.session.status).toBe("aberto");
+  expect(session?.expectedCents).toBe(100);
+
+  await owner.t2.mutation(api.cash.closeSession, {
+    organizationId: owner.orgId,
+    countedCents: 100,
+  });
+});
+
+test("barbeiro consulta o PDV e operador de caixa acessa PDV e caixa", async () => {
+  const owner = await seedOwner();
+  const barber = await seedStaff(owner, "barber");
+  const cashier = await seedStaff(owner, "cashier");
+
+  const sales = await barber.t2.query(api.sales.listSales, {
+    organizationId: owner.orgId,
+  });
+  expect(sales).toBeDefined();
+
+  const cashierSales = await cashier.t2.query(api.sales.listSales, {
+    organizationId: owner.orgId,
+  });
+  expect(cashierSales).toBeDefined();
+
+  const cashierSession = await cashier.t2.query(api.cash.currentSession, {
+    organizationId: owner.orgId,
+  });
+  expect(cashierSession).toBeNull();
+});
