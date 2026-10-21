@@ -131,11 +131,11 @@ def run():
             email_page.locator('input[autocomplete="one-time-code"]').fill(code)
             email_page.get_by_role("button", name="Verificar código").click()
             email_page.wait_for_url(re.compile(r"/onboarding(?:[?#].*)?$"), timeout=60000)
-            expect(email_page.get_by_role("button", name="Criar barbearia")).to_be_visible(timeout=20000)
+            expect(email_page.locator("#ob-name")).to_be_visible(timeout=20000)
             shot(email_page, "09-email-validado")
             stage = "cadastro-barbearia"
             email_page.locator("#ob-name").fill("Barbearia de Homologação E2E")
-            email_page.get_by_role("button", name="Criar barbearia").click()
+            email_page.locator("form").filter(has=email_page.locator("#ob-name")).get_by_role("button", name="Criar barbearia").click()
             email_page.wait_for_url(re.compile(r"/app/configuracoes(?:[?#].*)?$"), timeout=45000)
             expect(email_page.get_by_role("heading", name="Configurações").first).to_be_visible(timeout=30000)
             shot(email_page, "10-barbearia-criada")
