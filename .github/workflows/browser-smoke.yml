@@ -49,7 +49,7 @@ jobs:
           writeFileSync("/tmp/barber-jwt-private", privateKey.export({ type: "pkcs8", format: "pem" }), { mode: 0o600 });
           writeFileSync("/tmp/barber-jwks", JSON.stringify({ keys: [{ ...publicKey.export({ format: "jwk" }), use: "sig", alg: "RS256" }] }), { mode: 0o600 });
           NODE
-          bunx convex env set JWT_PRIVATE_KEY "$(cat /tmp/barber-jwt-private)"
+          cat /tmp/barber-jwt-private | bunx convex env set JWT_PRIVATE_KEY
           bunx convex env set JWKS "$(cat /tmp/barber-jwks)"
           bunx convex env set SITE_URL "http://127.0.0.1:5173"
           rm -f /tmp/barber-jwt-private /tmp/barber-jwks
