@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { RBAC, canManage, canView } from "../src/lib/rbac";
+import { APP_ROLES, RBAC, canManage, canView } from "../src/lib/rbac";
 
 /**
  * A matriz de permissões é a base do isolamento por papel. Estes testes travam
@@ -38,5 +38,16 @@ describe("RBAC", () => {
     expect(canView("manager", "team")).toBe(true);
     expect(canManage("manager", "team")).toBe(false);
     expect(canManage("owner", "team")).toBe(true);
+  });
+  test("qualquer papel que pode gerenciar um módulo também pode visualizá-lo", () => {
+    for (const role of APP_ROLES) {
+      for (const capability of RBAC[role].manage) {
+        expect(canView(role, capability)).toBe(true);
+      }
+    }
+    expect(canView("barber", "pos")).toBe(true);
+    expect(canView("cashier", "pos")).toBe(true);
+    expect(canView("cashier", "cash")).toBe(true);
+    expect(canView("cashier", "crm")).toBe(true);
   });
 });

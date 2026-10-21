@@ -184,6 +184,8 @@ const schema = defineSchema(
         filterFields: ["organizationId"],
       }),
 
+    // Tabelas legadas de pacotes/assinaturas, preservadas para compatibilidade com dados históricos.
+    // Novas operações de produto não expõem criação, venda ou consumo desses registros.
     packages: defineTable({
       organizationId: v.id("organizations"),
       name: v.string(),
@@ -388,7 +390,7 @@ const schema = defineSchema(
       unitPriceCents: v.number(),
       totalCents: v.number(),
       costCents: v.number(),
-      coveredByCreditCents: v.number(), // parte paga com crédito de pacote/assinatura
+      coveredByCreditCents: v.number(), // Campo legado mantido para registros históricos; novas vendas gravam zero.
       barberId: v.optional(v.id("barbers")),
     }).index("by_sale", ["saleId"]).index("by_org", ["organizationId"]),
 

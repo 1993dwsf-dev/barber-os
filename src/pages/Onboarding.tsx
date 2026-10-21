@@ -74,8 +74,12 @@ export default function Onboarding() {
     setBusy(true);
     setError(null);
     try {
-      const orgId = await joinByInviteCode({ code: code.trim().toUpperCase() });
-      select(orgId);
+      const result = await joinByInviteCode({ code: code.trim().toUpperCase() });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      select(result.organizationId);
       toast.success("Você entrou na unidade!");
       navigate("/app");
     } catch (err) {
@@ -266,7 +270,7 @@ export default function Onboarding() {
                   value={code}
                   onChange={(e) => setCode(e.target.value.toUpperCase())}
                   placeholder="ABC123"
-                  maxLength={8}
+                  maxLength={12}
                   className="glass-input mt-1.5 text-center text-lg font-semibold tracking-[0.3em]"
                   required
                   disabled={busy}
@@ -292,7 +296,7 @@ export default function Onboarding() {
                 <ul className="mt-3 flex flex-col gap-2 text-[13px] text-muted-foreground">
                   <li>• Barbearia fictícia “Barbearia Navalha de Ouro”, em São Paulo</li>
                   <li>• 4 barbeiros, 25 clientes, 45 dias de agenda e vendas</li>
-                  <li>• Pacotes, assinaturas, fidelidade, despesas e comissões</li>
+                  <li>• Agenda, vendas, fidelidade, despesas e comissões</li>
                   <li>• Você pode redefinir ou limpar os dados a qualquer momento</li>
                 </ul>
               </div>

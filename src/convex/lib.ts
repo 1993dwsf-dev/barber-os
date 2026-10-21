@@ -1,8 +1,8 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { type AppRole, type Cap, canManage, canView } from "../lib/rbac";
 import { todayISO } from "../lib/dates";
-import { type AppRole, type Cap, canView, canManage } from "../lib/rbac";
 
 export class HttpError extends Error {}
 
@@ -202,7 +202,7 @@ export async function ensureLoyaltyAccount(
   return (await ctx.db.get(id))!;
 }
 
-/** Premia pontos por dinheiro real pago (exclui pagamentos com crédito de pacote/assinatura). */
+/** Premia pontos com base no valor efetivamente pago em dinheiro. */
 export async function awardLoyalty(
   ctx: MutationCtx,
   org: Doc<"organizations">,

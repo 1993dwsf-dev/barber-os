@@ -390,12 +390,12 @@ function MovementDialog({
   onSaved: () => void;
 }) {
   const { orgId } = useOrg();
+  const add = useMutation(api.cash.addMovement);
   const [type, setType] = useState<"entrada" | "saida" | "retirada">("entrada");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const add = useMutation(api.cash.addMovement);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

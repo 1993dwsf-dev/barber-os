@@ -5,7 +5,6 @@ import {
   Check,
   CreditCard,
   Minus,
-  Package,
   Plus,
   Receipt,
   Search,
@@ -26,11 +25,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { EmptyState, Loading, PageHeader, SectionTitle, Tone } from "@/components/glass";
+import { EmptyState, Loading, PageHeader, SectionTitle } from "@/components/glass";
 import { PAYMENT_LABELS, brl, centsToInput, fmtDate, reaisToCents } from "@/lib/format";
 import { useOrg } from "@/lib/org-context";
 
-type Kind = "servico" | "produto" | "pacote" | "plano";
+type Kind = "servico" | "produto";
 type PayLine = { method: "dinheiro" | "debito" | "credito" | "pix"; amountCents: number };
 
 type CartLine = {
@@ -42,9 +41,6 @@ type CartLine = {
   unitPriceCents: number;
   costCents: number;
   barberId?: string;
-  coveredByCreditCents: number;
-  clientPackageId?: string;
-  membershipId?: string;
 };
 
 export default function Pdv() {
@@ -68,18 +64,6 @@ export default function Pdv() {
       ? { organizationId: orgId, search: term, limit: 8, sort: "nome" }
       : "skip",
   );
-  const clientPackages = useQuery(
-    api.catalog.listClientPackages,
-    orgId && clientId ? { organizationId: orgId, clientId: clientId as Id<"clients">, status: "ativo" } : "skip",
-  );
-  const memberships = useQuery(
-    api.catalog.listMemberships,
-    orgId && clientId
-      ? { organizationId: orgId, clientId: clientId as Id<"clients">, status: "ativa" }
-      : "skip",
-  );
-  const packages = useQuery(api.catalog.listPackages, orgId ? { organizationId: orgId } : "skip");
-  const plans = useQuery(api.catalog.listPlans, orgId ? { organizationId: orgId } : "skip");
   const createSale = useMutation(api.sales.createSale);
   const recent = useQuery(
     api.sales.listSales,
@@ -104,21 +88,15 @@ export default function Pdv() {
         extra: `${p.stock} ${p.unit}`,
       });
     }
-    for (const p of packages ?? []) {
-      rows.push({ kind: "pacote", id: p._id, name: p.name, price: p.priceCents, cost: 0, extra: `${p.credits} créditos` });
-    }
-    for (const p of plans ?? []) {
-      rows.push({ kind: "plano", id: p._id, name: p.name, price: p.priceCents, cost: 0, extra: "assinatura" });
-    }
     if (!t) return rows.slice(0, 24);
     return rows.filter((r) => r.name.toLowerCase().includes(t)).slice(0, 24);
-  }, [services, products, packages, plans, t]);
+  }, [services, products, t]);
 
   if (!orgId) return <Loading />;
 
   function addLine(row: { kind: Kind; id: string; name: string; price: number; cost: number }) {
     setCart((prev) => {
-      const existing = prev.find((l) => l.kind === row.kind && l.refId === row.id && !l.coveredByCreditCents);
+      const existing = prev.find((l) => l.kind === row.kind && l.refId === row.id);
       if (existing) {
         return prev.map((l) =>
           l.key === existing.key
@@ -137,7 +115,6 @@ export default function Pdv() {
           unitPriceCents: row.price,
           costCents: row.cost,
           barberId: row.kind === "servico" ? barberId || undefined : undefined,
-          coveredByCreditCents: 0,
         },
       ];
     });
@@ -155,26 +132,9 @@ export default function Pdv() {
     setCart((prev) => prev.filter((l) => l.key !== key));
   }
 
-  /** Usa um crédito do cliente para cobrir (totalmente) um serviço do carrinho. */
-  function applyCredit(lineKey: string, source: { type: "pacote" | "plano"; id: string }) {
-    setCart((prev) =>
-      prev.map((l) => {
-        if (l.key !== lineKey) return l;
-        const total = l.qty * l.unitPriceCents;
-        return {
-          ...l,
-          coveredByCreditCents: Math.min(total, l.unitPriceCents),
-          clientPackageId: source.type === "pacote" ? source.id : undefined,
-          membershipId: source.type === "plano" ? source.id : undefined,
-        };
-      }),
-    );
-  }
-
   const subtotal = cart.reduce((s, l) => s + l.qty * l.unitPriceCents, 0);
-  const credits = cart.reduce((s, l) => s + l.coveredByCreditCents, 0);
-  const discountCents = Math.min(reaisToCents(discount), Math.max(0, subtotal - credits));
-  const total = subtotal - credits - discountCents;
+  const discountCents = Math.min(reaisToCents(discount), subtotal);
+  const total = subtotal - discountCents;
   const paid = payments.reduce((s, p) => s + p.amountCents, 0);
   const missingPayment = payments.some((p) => p.amountCents === 0);
   const cashTotal = payments
@@ -202,9 +162,6 @@ export default function Pdv() {
           unitPriceCents: l.unitPriceCents,
           costCents: l.costCents,
           barberId: l.barberId ? (l.barberId as Id<"barbers">) : undefined,
-          coveredByCreditCents: l.coveredByCreditCents || undefined,
-          clientPackageId: l.clientPackageId ? (l.clientPackageId as Id<"clientPackages">) : undefined,
-          membershipId: l.membershipId ? (l.membershipId as Id<"memberships">) : undefined,
         })),
         payments: payments
           .filter((p) => p.amountCents > 0)
@@ -230,7 +187,7 @@ export default function Pdv() {
       <PageHeader
         eyebrow="Operação"
         title="PDV"
-        description="Venda de serviços, produtos, pacotes e planos com pagamento dividido, crédito de pacote e baixa automática de estoque."
+        description="Venda de serviços e produtos com pagamento dividido e baixa automática de estoque."
       />
 
       <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
@@ -288,13 +245,7 @@ export default function Pdv() {
                         {row.name}
                       </span>
                       <span className="text-[11px] text-muted-foreground">
-                        {row.kind === "servico"
-                          ? "Serviço"
-                          : row.kind === "produto"
-                            ? "Produto"
-                            : row.kind === "pacote"
-                              ? "Pacote"
-                              : "Plano"}{" "}
+                        {row.kind === "servico" ? "Serviço" : "Produto"}{" "}
                         {row.extra ? `· ${row.extra}` : ""}
                       </span>
                     </span>
@@ -340,12 +291,7 @@ export default function Pdv() {
                   <Label className="text-xs">Cliente</Label>
                   <Select
                     value={clientId || "none"}
-                    onValueChange={(v) => {
-                      setClientId(v === "none" ? "" : v);
-                      setCart((prev) =>
-                        prev.map((l) => ({ ...l, coveredByCreditCents: 0, clientPackageId: undefined, membershipId: undefined })),
-                      );
-                    }}
+                    onValueChange={(v) => setClientId(v === "none" ? "" : v)}
                   >
                     <SelectTrigger className="glass-input mt-1">
                       <SelectValue placeholder="Consumidor não identificado" />
@@ -407,10 +353,7 @@ export default function Pdv() {
               ) : (
                 <ul className="flex flex-col gap-2">
                   {cart.map((l) => {
-                    const creditsAvailable =
-                      (clientPackages ?? []).filter((cp) => !cp.expired && cp.remaining > 0).length +
-                      (memberships ?? []).filter((m) => m.creditsRemaining > 0).length;
-                    return (
+return (
                       <li key={l.key} className="rounded-xl glass-chip px-3 py-2">
                         <div className="flex items-start gap-2">
                           <span className="min-w-0 flex-1">
@@ -419,15 +362,10 @@ export default function Pdv() {
                             </span>
                             <span className="text-[11px] text-muted-foreground">
                               {brl(l.unitPriceCents)} un.
-                              {l.coveredByCreditCents > 0 ? (
-                                <span className="ml-1 text-emerald-600">
-                                  · {brl(l.coveredByCreditCents)} no crédito
-                                </span>
-                              ) : null}
-                            </span>
+</span>
                           </span>
                           <span className="text-[13px] font-semibold tabular-nums text-foreground">
-                            {brl(l.qty * l.unitPriceCents - l.coveredByCreditCents)}
+                            {brl(l.qty * l.unitPriceCents)}
                           </span>
                         </div>
 
@@ -461,15 +399,7 @@ export default function Pdv() {
                             <Trash2 className="size-3.5" />
                           </Button>
                         </div>
-
-                        {l.kind === "servico" && clientId && !l.coveredByCreditCents && creditsAvailable > 0 ? (
-                          <CreditPicker
-                            clientPackages={clientPackages ?? []}
-                            memberships={memberships ?? []}
-                            onPick={(source) => applyCredit(l.key, source)}
-                          />
-                        ) : null}
-                      </li>
+</li>
                     );
                   })}
                 </ul>
@@ -483,13 +413,7 @@ export default function Pdv() {
                   <span>Subtotal</span>
                   <span className="tabular-nums">{brl(subtotal)}</span>
                 </div>
-                {credits > 0 ? (
-                  <div className="flex justify-between text-emerald-600">
-                    <span>Créditos aplicados</span>
-                    <span className="tabular-nums">− {brl(credits)}</span>
-                  </div>
-                ) : null}
-                <div className="flex items-center justify-between gap-3">
+<div className="flex items-center justify-between gap-3">
                   <span className="text-muted-foreground">Desconto (R$)</span>
                   <Input
                     className="glass-input h-8 w-28 text-right"
@@ -627,59 +551,3 @@ export default function Pdv() {
   );
 }
 
-function CreditPicker({
-  clientPackages,
-  memberships,
-  onPick,
-}: {
-  clientPackages: {
-    _id: Id<"clientPackages">;
-    packageName: string;
-    remaining: number;
-    expired: boolean;
-  }[];
-  memberships: {
-    _id: Id<"memberships">;
-    planName: string;
-    creditsRemaining: number;
-  }[];
-  onPick: (source: { type: "pacote" | "plano"; id: string }) => void;
-}) {
-  const options = [
-    ...clientPackages
-      .filter((c) => !c.expired && c.remaining > 0)
-      .map((c) => ({
-        type: "pacote" as const,
-        id: c._id as string,
-        label: `${c.packageName} · ${c.remaining} créditos`,
-      })),
-    ...memberships
-      .filter((m) => m.creditsRemaining > 0)
-      .map((m) => ({
-        type: "plano" as const,
-        id: m._id as string,
-        label: `${m.planName} · ${m.creditsRemaining} créditos`,
-      })),
-  ];
-
-  if (options.length === 0) return null;
-
-  return (
-    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-      <Tone className="border-primary/25 bg-primary/10 text-primary">
-        <Package className="size-3" /> Usar crédito:
-      </Tone>
-      {options.map((o) => (
-        <Button
-          key={`${o.type}-${o.id}`}
-          variant="outline"
-          size="sm"
-          className="h-7 bg-white/70 text-[11px]"
-          onClick={() => onPick({ type: o.type, id: o.id })}
-        >
-          {o.label}
-        </Button>
-      ))}
-    </div>
-  );
-}

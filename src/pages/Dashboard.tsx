@@ -20,7 +20,6 @@ import {
 import {
   AlertTriangle,
   ArrowUpRight,
-  BadgeDollarSign,
   CalendarCheck,
   CalendarClock,
   Cake,
@@ -37,7 +36,7 @@ import { useMemo } from "react";
 import { EmptyState, Loading, PageHeader, SectionTitle, StatCard, Tone } from "@/components/glass";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { APPOINTMENT_STATUS_LABELS, PAYMENT_LABELS, brl, fmtDate, fmtPhone, whatsappLink } from "@/lib/format";
+import { APPOINTMENT_STATUS_LABELS, PAYMENT_LABELS, brl, fmtDate, fmtPhone } from "@/lib/format";
 import { todayISO } from "@/lib/dates";
 import { useOrg } from "@/lib/org-context";
 
@@ -98,10 +97,6 @@ export default function Dashboard() {
         marginCents: p.marginCents / 100,
       })),
       retention: data.charts.retention,
-      membershipRevenueTrend: data.charts.membershipRevenueTrend.map((m) => ({
-        ...m,
-        value: m.value / 100,
-      })),
     };
   }, [data]);
 
@@ -135,7 +130,7 @@ export default function Dashboard() {
       />
 
       {/* KPIs */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard
           label="Faturamento hoje"
           value={brl(k.revenueToday)}
@@ -164,12 +159,7 @@ export default function Dashboard() {
           tone="warning"
           hint={`Resultado estimado ${brl(k.netProfit)} (margem ${k.profitMargin}%)`}
         />
-        <StatCard
-          label="Assinaturas ativas"
-          value={k.activeMemberships}
-          icon={BadgeDollarSign}
-          hint={`Receita recorrente de ${brl(k.mrr)}/mês · ${k.renewalsSoon} a renovar`}
-        />
+
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -599,38 +589,6 @@ export default function Dashboard() {
                       <span className="text-xs text-muted-foreground">
                         {b.days === 0 ? "hoje" : `em ${b.days}d`}
                       </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div className="border-t pt-3">
-              <p className="mb-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
-                Assinaturas a renovar
-              </p>
-              {data.renewalsSoon.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Nenhuma renovação próxima.</p>
-              ) : (
-                <ul className="flex flex-col gap-1.5">
-                  {data.renewalsSoon.map((r) => (
-                    <li key={r.id} className="flex items-center gap-2 text-[13px]">
-                      <span className="min-w-0 flex-1 truncate text-foreground">{r.clientName}</span>
-                      <span className="text-xs tabular-nums text-muted-foreground">
-                        {fmtDate(r.renewalDate)}
-                      </span>
-                      <a
-                        href={whatsappLink(
-                          r.clientPhone,
-                          `Olá ${r.clientName}! Seu plano BarberFlow renova em ${fmtDate(
-                            r.renewalDate,
-                          )}. Deseja renovar?`,
-                        )}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs font-medium text-primary hover:underline"
-                      >
-                        WhatsApp
-                      </a>
                     </li>
                   ))}
                 </ul>

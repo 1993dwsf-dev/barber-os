@@ -15,35 +15,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
-    env:
-      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
 
       - name: Instalar Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
-      # Vitest 5 exige Node >= 22.12; o runner traz Node 20 por padrão.
-      - name: Instalar Node 22 (Vitest)
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
       - name: Instalar dependências
         run: bun install --frozen-lockfile
 
-      - name: Verificar configuração do Convex
-        run: |
-          if [ -z "$CONVEX_DEPLOY_KEY" ]; then
-            echo "::error::Configure o secret CONVEX_DEPLOY_KEY em Settings > Secrets and variables > Actions."
-            exit 1
-          fi
-
-      - name: Gerar tipos do Convex
+      - name: Configurar backend Convex local e gerar tipos
         run: bunx convex dev --once
 
       - name: Auditoria de dependências
@@ -58,10 +47,10 @@ jobs:
       - name: Validar índices por organização
         run: bun run check:schema
 
-      - name: Executar testes (Bun)
-        run: bun run test:unit
+      - name: Executar testes unitários
+        run: bun test
 
-      - name: Executar testes de backend (Vitest)
+      - name: Executar testes do backend
         run: bun run test:backend
 
       - name: Build de produção

@@ -380,8 +380,6 @@ export const complete = mutation({
         amountCents: v.number(),
       }),
     ),
-    clientPackageId: v.optional(v.id("clientPackages")),
-    membershipId: v.optional(v.id("memberships")),
     discountCents: v.optional(v.number()),
     notes: v.optional(v.string()),
   },
@@ -392,20 +390,9 @@ export const complete = mutation({
     if (appt.status === "concluido") bad("Este atendimento já foi concluído.");
     if (appt.status === "cancelado") bad("Atendimento cancelado não pode ser concluído.");
 
-    if (args.clientPackageId && args.membershipId) {
-      bad(
-        "Escolha um pacote ou uma assinatura para este atendimento, não ambos.",
-      );
-    }
-
     const service = await ctx.db.get(appt.serviceId);
     const client = await ctx.db.get(appt.clientId);
 
-    const creditUsed = args.clientPackageId ?? args.membershipId;
-    const covered = creditUsed ? appt.priceCents : 0;
-    const moneyPayments = creditUsed
-      ? args.payments.filter((p) => p.amountCents > 0)
-      : args.payments;
 
     const sale = await recordSale(ctx, org, userId as Id<"users">, {
       date: todayISO(),
@@ -421,12 +408,9 @@ export const complete = mutation({
           qty: 1,
           unitPriceCents: appt.priceCents,
           barberId: appt.barberId,
-          coveredByCreditCents: covered,
-          clientPackageId: args.clientPackageId,
-          membershipId: args.membershipId,
         },
       ],
-      payments: moneyPayments,
+      payments: args.payments,
     });
 
     await ctx.db.patch(appt._id, {

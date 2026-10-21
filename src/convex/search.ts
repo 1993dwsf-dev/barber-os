@@ -80,22 +80,6 @@ export const globalSearch = query({
       });
     }
 
-    const packages = await ctx.db
-      .query("packages")
-      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
-      .collect();
-    for (const pkg of packages.filter((p) => p.name.toLowerCase().includes(term.toLowerCase())).slice(0, 3)) {
-      results.push({ type: "Pacote", title: pkg.name, subtitle: "Pacote de serviços", link: "/app/pacotes" });
-    }
-
-    const plans = await ctx.db
-      .query("membershipPlans")
-      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
-      .collect();
-    for (const plan of plans.filter((p) => p.name.toLowerCase().includes(term.toLowerCase())).slice(0, 3)) {
-      results.push({ type: "Assinatura", title: plan.name, subtitle: "Plano de assinatura", link: "/app/assinaturas" });
-    }
-
     const todayAppointments = await ctx.db
       .query("appointments")
       .withIndex("by_org_date", (q) => q.eq("organizationId", args.organizationId).eq("date", today))

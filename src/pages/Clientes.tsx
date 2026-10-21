@@ -99,7 +99,7 @@ export default function Clientes() {
       <PageHeader
         eyebrow="Relacionamento"
         title="Clientes"
-        description="Base única de clientes: histórico de atendimentos, gasto, etiquetas, pacotes, assinaturas e pontos de fidelidade."
+        description="Base única de clientes: histórico de atendimentos, gasto, etiquetas e pontos de fidelidade."
         actions={
           canEdit("clients") ? (
             <Button onClick={() => setOpen(true)}>

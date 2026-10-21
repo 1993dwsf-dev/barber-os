@@ -14,8 +14,7 @@ type MoneyMethods = "dinheiro" | "debito" | "credito" | "pix";
 
 /**
  * Painel de controle: TODOS os números vêm de registros reais do banco.
- * Receita = pagamentos em dinheiro/cartão/PIX (créditos de pacote/assinatura
- * não entram de novo na receita, pois já foram reconhecidos na venda do pacote).
+ * Receita = pagamentos em dinheiro/cartão/PIX registrados nas vendas.
  */
 export const dashboard = query({
   args: { organizationId: v.id("organizations") },
@@ -117,7 +116,7 @@ export const dashboard = query({
       .query("commissions")
       .withIndex("by_org_date", (q) => q.eq("organizationId", args.organizationId))
       .collect();
-    const commissionsPaid = commissions
+      const commissionsPaid = commissions
       .filter((c) => c.status === "paga" && inRange(c.date, month.start, month.end))
       .reduce((s, c) => s + c.amountCents, 0);
     const commissionsPending = commissions
@@ -143,8 +142,6 @@ export const dashboard = query({
     );
     const productRevenueMonth = itemRevenue(monthRows, "produto");
     const serviceRevenueMonth = itemRevenue(monthRows, "servico");
-    const membershipRevenueMonth = itemRevenue(monthRows, "plano");
-    const packageRevenueMonth = itemRevenue(monthRows, "pacote");
 
     const grossProfit =
       revenueMonth - productCostMonth - commissionsPaid;
@@ -152,29 +149,6 @@ export const dashboard = query({
     const netProfit =
       grossProfit - expensesMonthTotal;
 
-    /* ---------------------- assinaturas ---------------------- */
-    const memberships = await ctx.db
-      .query("memberships")
-      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
-      .collect();
-    const activeMemberships = memberships.filter((m) => m.status === "ativa");
-    const mrr = activeMemberships.reduce((s, m) => s + m.priceCents, 0);
-    const renewalsSoon = [];
-    for (const m of memberships) {
-      const days = daysBetween(today, m.renewalDate);
-      if (m.status === "ativa" && days <= 7) {
-        const client = await ctx.db.get(m.clientId);
-        renewalsSoon.push({
-          id: m._id,
-          clientName: client?.name ?? "—",
-          clientPhone: client?.phone ?? "",
-          renewalDate: m.renewalDate,
-          priceCents: m.priceCents,
-          days,
-        });
-      }
-    }
-    renewalsSoon.sort((a, b) => a.days - b.days);
 
     /* ---------------------- caixa ---------------------- */
     const openSession = await ctx.db
@@ -364,11 +338,6 @@ export const dashboard = query({
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 8);
 
-    const membershipRevenueTrend = last6Months.map((m) => ({
-      label: `${m.start.slice(5, 7)}/${m.start.slice(2, 4)}`,
-      value: itemRevenue(saleData.filter((r) => inRange(r.sale.date, m.start, m.end)), "plano"),
-    }));
-
     const profitTrend = last6Months.map((m) => {
       const revenue = sumPayments(saleData.filter((r) => inRange(r.sale.date, m.start, m.end)));
       const exp = expenses.filter((e) => inRange(e.date, m.start, m.end)).reduce((s, e) => s + e.amountCents, 0);
@@ -425,15 +394,6 @@ export const dashboard = query({
         link: "/app/relacionamento",
         severity: "alerta",
         count: overdueFollowups.length,
-      });
-    if (renewalsSoon.length > 0)
-      attention.push({
-        key: "renovacoes",
-        title: "Assinaturas a renovar",
-        detail: `${renewalsSoon.length} renovação(ões) nos próximos 7 dias.`,
-        link: "/app/assinaturas",
-        severity: "info",
-        count: renewalsSoon.length,
       });
     if (commissionsPending > 0)
       attention.push({
@@ -509,8 +469,6 @@ export const dashboard = query({
         averageTicket: avgTicket,
         serviceRevenueMonth,
         productRevenueMonth,
-        membershipRevenueMonth,
-        packageRevenueMonth,
         productCostMonth,
         salesCountMonth: monthRows.length,
         salesCountToday: todayRows.length,
@@ -523,9 +481,6 @@ export const dashboard = query({
           appointments.length > 0 ? Math.round((noShowTotal / appointments.length) * 100) : 0,
         completionRate:
           appointments.length > 0 ? Math.round((completedToday / appointments.length) * 100) : 0,
-        activeMemberships: activeMemberships.length,
-        mrr,
-        renewalsSoon: renewalsSoon.length,
         pendingCommissionsCents: commissionsPending,
         paidCommissionsCents: commissionsPaid,
         lowStockCount: lowStock.length,
@@ -557,11 +512,9 @@ export const dashboard = query({
         appointmentsTrend,
         retention,
         productSales,
-        membershipRevenueTrend,
       },
       todayByMethod,
       monthByMethod,
-      renewalsSoon: renewalsSoon.slice(0, 6),
       lowStock: lowStock.slice(0, 6),
       birthdaysSoon: birthdaysSoon.slice(0, 5),
       isDemo: org.isDemo,

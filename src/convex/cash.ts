@@ -5,6 +5,13 @@ import { audit, bad, notify, requireManage, requireView } from "./lib";
 import { dateISO, requiredText, text } from "./validation";
 import { todayISO } from "../lib/dates";
 
+/** Todos os valores monetários persistidos são inteiros seguros em centavos. */
+function requireCents(value: number, label: string, allowZero = false): void {
+  if (!Number.isSafeInteger(value) || value < (allowZero ? 0 : 1)) {
+    bad(`${label} deve ser um valor inteiro em centavos ${allowZero ? "não negativo" : "maior que zero"}.`);
+  }
+}
+
 /** Saldo de caixa esperado a partir da sessão e seus movimentos. */
 function expectedFromMovements(openingCents: number, movements: Array<{ type: string; amountCents: number }>) {
   let total = openingCents;
@@ -76,7 +83,7 @@ export const openSession = mutation({
   },
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "cash");
-    if (args.openingBalanceCents < 0) bad("O valor de abertura não pode ser negativo.");
+    requireCents(args.openingBalanceCents, "O valor de abertura", true);
     const existing = await ctx.db
       .query("cashSessions")
       .withIndex("by_org_status", (q) =>
@@ -113,7 +120,7 @@ export const addMovement = mutation({
   },
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "cash");
-    if (args.amountCents <= 0) bad("Informe um valor maior que zero.");
+    requireCents(args.amountCents, "O movimento");
     const session = await ctx.db
       .query("cashSessions")
       .withIndex("by_org_status", (q) =>
@@ -151,7 +158,7 @@ export const closeSession = mutation({
   },
   handler: async (ctx, args) => {
     const { org, userId } = await requireManage(ctx, args.organizationId, "cash");
-    if (args.countedCents < 0) bad("Informe o valor contado (pode ser zero).");
+    requireCents(args.countedCents, "O valor contado", true);
     const session = await ctx.db
       .query("cashSessions")
       .withIndex("by_org_status", (q) =>

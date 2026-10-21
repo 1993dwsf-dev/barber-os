@@ -196,32 +196,6 @@ export const generateSuggestions = mutation({
       }
     }
 
-    // renovações em até 7 dias
-    const memberships = await ctx.db
-      .query("memberships")
-      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
-      .collect();
-    for (const m of memberships) {
-      if (m.status !== "ativa") continue;
-      const days = daysBetween(today, m.renewalDate);
-      if (days <= 7 && days >= -7 && !open.has(`${m.clientId}:renovacao`)) {
-        const client = await ctx.db.get(m.clientId);
-        const plan = await ctx.db.get(m.planId);
-        await ctx.db.insert("followups", {
-          organizationId: org._id,
-          clientId: m.clientId,
-          reason: "renovacao",
-          title: `Renovar assinatura de ${client?.name ?? "cliente"}`,
-          notes: `${plan?.name ?? "Plano"} — vence em ${m.renewalDate}.`,
-          ownerId: userId as Id<"users">,
-          dueDate: m.renewalDate,
-          priority: days <= 2 ? "alta" : "media",
-          status: "pendente",
-          createdAt: Date.now(),
-        });
-        created++;
-      }
-    }
 
     await audit(ctx, org._id, userId, {
       action: "gerou",

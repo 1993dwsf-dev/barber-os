@@ -1,12 +1,10 @@
-import "@vly-ai/integrations";
 import { Toaster } from "@/components/ui/sonner";
 import { RequireAuth } from "@/components/RequireAuth";
 import { RequireOrg } from "@/components/RequireOrg";
 import { AppShell } from "@/components/AppShell";
-import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
-import React, { StrictMode, lazy, Suspense, useEffect } from "react";
+import React, { StrictMode, lazy, Suspense } from "react";
 import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
@@ -23,8 +21,6 @@ const ClienteDetalhe = lazy(() => import("./pages/ClienteDetalhe.tsx"));
 const Equipe = lazy(() => import("./pages/Equipe.tsx"));
 const BarbeiroDetalhe = lazy(() => import("./pages/BarbeiroDetalhe.tsx"));
 const Servicos = lazy(() => import("./pages/Servicos.tsx"));
-const Pacotes = lazy(() => import("./pages/Pacotes.tsx"));
-const Assinaturas = lazy(() => import("./pages/Assinaturas.tsx"));
 const Produtos = lazy(() => import("./pages/Produtos.tsx"));
 const Pdv = lazy(() => import("./pages/Pdv.tsx"));
 const Caixa = lazy(() => import("./pages/Caixa.tsx"));
@@ -45,24 +41,6 @@ function RouteLoading() {
       </div>
     </div>
   );
-}
-
-/** Silent error boundary — if VlyToolbar crashes it renders nothing instead of
- *  crashing the whole app (e.g. hook errors in the browser runtime). */
-class ToolbarErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { hasError: boolean }
-> {
-  state = { hasError: false };
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-  componentDidCatch(err: Error) {
-    console.warn("[VlyToolbar] Caught error, toolbar disabled:", err.message);
-  }
-  render() {
-    return this.state.hasError ? null : this.props.children;
-  }
 }
 
 /**
@@ -110,28 +88,6 @@ class RootErrorBoundary extends React.Component<
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
-function VlyRouteBridge() {
-  useEffect(() => {
-    window.parent.postMessage(
-      { type: "iframe-route-change" },
-      "*",
-    );
-  }, []);
-
-  useEffect(() => {
-    function handleMessage(event: MessageEvent) {
-      if (event.data?.type === "navigate") {
-        if (event.data.direction === "back") window.history.back();
-        if (event.data.direction === "forward") window.history.forward();
-      }
-    }
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, []);
-
-  return null;
-}
-
 /** Rota autenticada: exige sessão + unidade ativa e monta o shell do app. */
 function Protected({ children }: { children: ReactNode }) {
   return (
@@ -148,12 +104,8 @@ function Protected({ children }: { children: ReactNode }) {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <RootErrorBoundary>
-      <ToolbarErrorBoundary>
-        <VlyToolbar />
-      </ToolbarErrorBoundary>
       <ConvexAuthProvider client={convex}>
         <BrowserRouter>
-          <VlyRouteBridge />
           <Suspense fallback={<RouteLoading />}>
             <Routes>
               <Route path="/" element={<Landing />} />
@@ -163,7 +115,7 @@ createRoot(document.getElementById("root")!).render(
               />
               <Route
                 path="/onboarding"
-                element={<Protected><Onboarding /></Protected>}
+                element={<RequireAuth><OrgProvider><Onboarding /></OrgProvider></RequireAuth>}
               />
 
               <Route path="/dashboard" element={<Navigate to="/app" replace />} />
@@ -178,8 +130,6 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/app/equipe" element={<Protected><Equipe /></Protected>} />
               <Route path="/app/barbeiros/:id" element={<Protected><BarbeiroDetalhe /></Protected>} />
               <Route path="/app/servicos" element={<Protected><Servicos /></Protected>} />
-              <Route path="/app/pacotes" element={<Protected><Pacotes /></Protected>} />
-              <Route path="/app/assinaturas" element={<Protected><Assinaturas /></Protected>} />
               <Route path="/app/produtos" element={<Protected><Produtos /></Protected>} />
               <Route path="/app/estoque" element={<Navigate to="/app/produtos" replace />} />
               <Route path="/app/despesas" element={<Protected><Despesas /></Protected>} />

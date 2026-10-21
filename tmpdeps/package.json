@@ -1,6 +1,0 @@
-{
-  "name": "tinypool-check",
-  "private": true,
-  "type": "module",
-  "dependencies": { "tinypool": "latest" }
-}
