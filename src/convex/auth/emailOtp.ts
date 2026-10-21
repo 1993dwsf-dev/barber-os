@@ -18,6 +18,18 @@ function emailEndpoint(): string {
 }
 
 async function sendAccessCode(email: string, token: string): Promise<void> {
+  // Com o remetente de testes Resend, só a conta de origem pode receber OTP.
+  // A restrição vale no servidor: esconder campos na interface não seria suficiente.
+  const allowedEmail = process.env.BARBER_STAGING_EMAIL?.trim().toLowerCase();
+  const site = process.env.CONVEX_SITE_URL ?? "";
+  const localBackend = /^http:\/\/(localhost|127\.0\.0\.1):/.test(site);
+  if (!localBackend && !allowedEmail) {
+    throw new Error("Homologação indisponível: configure BARBER_STAGING_EMAIL no Convex.");
+  }
+  if (allowedEmail && email.trim().toLowerCase() !== allowedEmail) {
+    throw new Error("A homologação está restrita ao e-mail autorizado.");
+  }
+
   const key = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM_EMAIL;
   if (!key || !from?.trim()) {

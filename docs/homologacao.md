@@ -1,45 +1,96 @@
-# Homologação do Barber OS
+# Barber OS — homologação gratuita sem domínio próprio
 
-Esta fase prepara o app para uso com Convex, Resend e Cloudflare Pages. **Ainda não foi publicado neste projeto.** Testes de navegador utilizam dados fictícios e envio de e-mail simulado.
+Esta implantação é de **teste privado**, não é ambiente comercial. O site usa um endereço grátis `*.pages.dev`, a autenticação usa Convex Auth e o Resend envia OTP de `onboarding@resend.dev` **somente ao e-mail da própria conta Resend**. Sem domínio verificado, outros usuários não conseguirão receber códigos de login.
 
-## Configuração do Convex
+## 1 — Contas necessárias (gratuitas dentro dos limites dos planos)
 
-1. Conecte um projeto e deployment de **desenvolvimento separado de produção** em https://dashboard.convex.dev.
-2. Na branch auditada execute `bun install --frozen-lockfile` e `bunx convex dev` para gerar os tipos e o arquivo local ignorado pelo Git.
-3. Na área de ambiente do deployment, configure as chaves de assinatura e conjunto público de chaves conforme https://labs.convex.dev/auth/setup. Não compartilhe essas chaves na conversa nem as publique no frontend.
-4. Configure a variável `SITE_URL` com a URL HTTPS que será fornecida pelo Pages. A URL `CONVEX_SITE_URL` é fornecida pelo Convex e não é a URL do seu frontend.
+- GitHub: repositório `1993dwsf-dev/barber-os`, branch **`staging`** (nunca `main`).
+- Cloudflare Pages: https://dash.cloudflare.com
+- Convex: https://dashboard.convex.dev
+- Resend: https://resend.com
 
-## E-mail com Resend
+**Não compartilhe chave de API, chave JWT, tokens de deploy ou credenciais neste chat.** Configure tudo diretamente nos painéis.
 
-1. Crie uma conta em https://resend.com.
-2. Verifique um domínio próprio como remetente seguindo as instruções de DNS do serviço. O domínio gratuito do Pages não concede automaticamente permissão de envio.
-3. No deployment Convex, configure `RESEND_API_KEY` e `RESEND_FROM_EMAIL`. O remetente deve pertencer ao domínio verificado, por exemplo: `Barber OS <acesso@seu-dominio.com.br>`.
-4. Não configure a variável opcional `RESEND_API_URL` em deployments publicados. Ela existe apenas para simular o envio em teste automatizado local.
-5. Use um e-mail real de teste para receber, verificar OTP e confirmar a criação de uma nova unidade. Os testes automatizados não comprovam entrega real de mensagens.
+## 2 — Resend sem domínio verificado
 
-O Resend anuncia plano grátis de 3.000 e-mails mensais e até 100 por dia: https://resend.com/pricing.
+1. Crie uma conta Resend com **o mesmo e-mail pessoal usado para testar o login do Barber OS**.
+2. Acesse **API Keys**, crie chave de envio com menor privilégio disponível. Guarde-a somente no painel do Convex.
+3. Configure `RESEND_FROM_EMAIL` como `Barber OS <onboarding@resend.dev>`.
+4. Configure `BARBER_STAGING_EMAIL` com o endereço exato associado à conta Resend. Essa validação é feita no backend.
+5. Não cadastre domínio em **Domains** nesta fase. O remetente de teste **não envia para outros destinatários**; não use para comercialização.
 
-## Publicação do frontend (Cloudflare Pages)
+Fonte: https://resend.com/docs e https://resend.com/pricing.
 
-1. Em https://dash.cloudflare.com abra Workers & Pages → Create → Pages e conecte o GitHub.
-2. Use uma branch de **homologação auditada**, não a `main` anterior. Só publique a branch após passar as verificações de CI.
-3. Framework Vite, raiz do repositório, comando `bun install --frozen-lockfile && bun run build`, diretório `dist`. Confirme que Bun está disponível no ambiente de build.
-4. Configure no Pages somente `VITE_CONVEX_URL` (URL HTTPS do seu deployment de homologação, com final `convex.cloud`). Não exponha chaves ou tokens privados como variáveis VITE.
-5. Depois que o Pages gerar uma URL HTTPS, configure-a como `SITE_URL` no Convex correspondente.
-6. O Cloudflare Pages atende rotas de uma SPA React automaticamente se não houver um arquivo `404.html` na raiz. Não crie uma regra genérica de reescrita que também atinja os arquivos JS/CSS.
-7. A URL pode ficar pública. Não cadastre dados reais enquanto a homologação não tiver autorização, isolamento e revisão LGPD.
+## 3 — Convex separado, hospedado na nuvem
 
-## Critérios de aprovação
+1. Na conta Convex, crie ou selecione um **projeto exclusivo para homologação**; não use dados nem deployments de clientes reais.
+2. No Codespaces, sincronize a branch `staging`: `git fetch origin && git switch staging && git pull --ff-only`.
+3. Instale dependências: `bun install --frozen-lockfile`.
+4. Se o seu Convex estiver ligado ao backend **local**, abra a CLI e selecione um deployment **cloud** desse projeto: `bunx convex dev --configure` e siga a escolha de projeto/deployment hospedado, ou use `bunx convex deployment select dev` quando já houver um deployment cloud vinculado.
+5. No painel de **Environment Variables** do deployment cloud, configure:
 
-- [ ] Login com envio real de OTP, código incorreto/expirado, logout e novo login
-- [ ] Cadastro da barbearia e vinculação da equipe
-- [ ] Agenda, PDV, caixa e relatórios coerentes com dados fictícios
-- [ ] Links diretos e recarga de /auth e /app/agenda funcionando
-- [ ] Testes desktop e smartphone aprovados
-- [ ] Nenhuma chave privada publicada em GitHub, Pages ou bundle
-- [ ] Regras LGPD, restauração de backup e monitoramento de falhas revisados
-- [ ] Gestão comercial de assinaturas SaaS implementada antes da cobrança
+| Variável privada do Convex | Valor |
+| --- | --- |
+| `RESEND_API_KEY` | chave criada na sua conta Resend |
+| `RESEND_FROM_EMAIL` | `Barber OS <onboarding@resend.dev>` |
+| `BARBER_STAGING_EMAIL` | e-mail da sua própria conta Resend |
+| `JWT_PRIVATE_KEY` | chave privada Convex Auth, gerada com segurança |
+| `JWKS` | conjunto público correspondente à mesma chave |
+| `SITE_URL` | URL real do Cloudflare Pages, após sua criação |
 
-**Migração:** a retirada do emissor federado Freebuff invalida sessões antigas originadas desse serviço. Usuários afetados precisam fazer novo login por OTP do Convex Auth.
+6. Gere o par `JWT_PRIVATE_KEY`/`JWKS` conforme o [guia oficial Convex Auth](https://labs.convex.dev/auth/setup) (veja a configuração manual); **não use chaves dos testes automatizados em serviços públicos**.
+7. Publique as funções no deployment de homologação por `bunx convex dev --once` depois de selecionar o deployment cloud.
+8. Copie **somente a URL pública do Convex cloud** terminada em `.convex.cloud` — ela será usada na próxima etapa. **Nunca use o endereço `http://127.0.0.1:3210` ou `*.convex.site` no frontend.**
 
-Referências: https://docs.convex.dev/auth/convex-auth, https://docs.convex.dev/production/environment-variables e https://developers.cloudflare.com/pages/configuration/serving-pages/.
+A `CONVEX_SITE_URL` é gerada pelo Convex (HTTP Actions); ela não é `SITE_URL`, que deve ser o endereço HTTPS do site no Pages.
+
+## 4 — Cloudflare Pages sem comprar domínio
+
+1. Em Cloudflare: **Workers & Pages → Create → Pages → Connect to Git**.
+2. Autorize o repositório `1993dwsf-dev/barber-os`.
+3. Defina a **Production branch = `staging`**. Neste projeto separado de teste, “Production” significa apenas a URL estável de homologação; não é a `main` nem a publicação comercial.
+4. Configurações de build:
+
+| Campo | Valor |
+| --- | --- |
+| Framework | `React (Vite)` / `Vite` |
+| Root directory | raiz (`/`) |
+| Production branch | `staging` |
+| Build command | `bun install --frozen-lockfile && bun run build:pages` |
+| Build output directory | `dist` |
+
+5. Configure as **Environment variables de build de produção** do Pages:
+
+| Nome | Valor |
+| --- | --- |
+| `VITE_CONVEX_URL` | URL HTTPS real do deployment Convex: `https://...convex.cloud` |
+| `VITE_STAGING_ONLY` | `true` |
+| `NODE_VERSION` | `24.21.0` |
+| `BUN_VERSION` | `1.4.3` |
+
+**Nunca configure no Pages:** `RESEND_API_KEY`, `JWT_PRIVATE_KEY`, `JWKS`, `CONVEX_DEPLOY_KEY`, `BARBER_STAGING_EMAIL`. Todas pertencem ao backend Convex.
+
+6. Confirme que a branch está correta e inicie a publicação. A Cloudflare fornecerá um endereço `https://nome-disponivel.pages.dev`; o nome é escolhido lá e ainda não está reservado.
+7. Volte às variáveis do Convex e configure `SITE_URL` com esse endereço **exato**, sem barra final.
+8. Volte ao site e abra `/auth`: somente o e-mail autorizado deve receber OTP, enquanto o acesso de visitante fica desligado na homologação hospedada.
+
+O script `scripts/check-pages-env.mjs` impede um build sem URL Convex HTTPS correta, sem `VITE_STAGING_ONLY=true`, ou com branch diferente de `staging`. O site pede que robôs não o indexem, **mas isso não é controle de acesso**.
+
+Fontes: https://developers.cloudflare.com/pages/configuration/git-integration/github-integration/ e https://developers.cloudflare.com/pages/configuration/build-image/.
+
+## 5 — Testar e liberar homologação
+
+- [ ] Testar um e-mail enviado pelo Resend à caixa da própria conta e verificar se chegou.
+- [ ] Abrir o endereço Pages em desktop e celular (preferencialmente janela anônima).
+- [ ] Solicitar OTP com o seu e-mail; entrar; criar uma barbearia com nome fictício.
+- [ ] Confirmar que outro e-mail não consegue se cadastrar.
+- [ ] Verificar que o botão "Entrar como visitante" não aparece no Pages.
+- [ ] Criar agendamento, realizar venda PIX fictícia e fechar caixa.
+- [ ] Atualizar direto as rotas `/auth`, `/app` e `/app/agenda` sem erro 404.
+- [ ] Confirmar backup, controles de permissões, custo dos planos e nenhuma credencial no bundle.
+
+A hospedagem de homologação pode ser acessível a qualquer pessoa que tenha a URL. A restrição de e-mail não equivale a uma plataforma comercial segura, e o endpoint Convex ainda existe publicamente. Não armazene dados pessoais de clientes reais.
+
+## Passagem para produção (etapa futura)
+
+Use domínio próprio/verificado no Resend para enviar a destinatários diferentes. Crie deployment Convex próprio para produção, implemente cobrança recorrente, finalize textos LGPD e faça revisão de segurança. **A `main` não deve ser mesclada ou publicada automaticamente nesta fase.**

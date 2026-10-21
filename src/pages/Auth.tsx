@@ -10,6 +10,8 @@ import { ArrowLeft, ArrowRight, Loader2, Mail, Scissors, Sparkles, UserX } from 
 import { Suspense, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
+const isStaging = import.meta.env.VITE_STAGING_ONLY === "true";
+
 interface AuthProps {
   redirectAfterAuth?: string;
 }
@@ -133,8 +135,9 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
             ))}
           </ul>
           <p className="glass-chip mt-auto rounded-2xl p-4 text-xs leading-relaxed text-muted-foreground">
-            Entrando com qualquer e-mail, você cria sua própria barbearia — ou entra como
-            visitante para conhecer o ambiente demo com dados de exemplo.
+            {isStaging
+              ? "Homologação: acesso restrito ao e-mail autorizado. Não use dados reais."
+              : "Entre com seu e-mail para criar sua barbearia ou experimente o ambiente de demonstração."}
           </p>
         </aside>
 
@@ -193,6 +196,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                   </p>
                 ) : null}
 
+                {!isStaging && (
+                  <>
                 <div className="my-5 flex items-center gap-3">
                   <span className="h-px flex-1 bg-border" />
                   <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -211,6 +216,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                   <UserX className="size-4" />
                   Entrar como visitante (ambiente demo)
                 </Button>
+                  </>
+                )}
               </form>
             </>
           ) : (

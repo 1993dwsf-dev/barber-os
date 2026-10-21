@@ -33,6 +33,8 @@ O GitHub Actions executa essas verificações. A automação **Browser smoke** i
 
 ## Homologação e publicação
 
-Consulte [docs/homologacao.md](docs/homologacao.md) para configurar **Convex + Resend + Cloudflare Pages** sem armazenar credenciais no código.
+Esta versão na branch `staging` foi preparada para **Cloudflare Pages gratuito + `onboarding@resend.dev`**. Ela só admite login com o e-mail autorizado no deployment Convex, e a sessão de visitante fica desabilitada em deployments hospedados.
+
+Configure **Production branch: `staging`**, build `bun install --frozen-lockfile && bun run build:pages`, output `dist`, `VITE_STAGING_ONLY=true` e a URL HTTPS `VITE_CONVEX_URL`. Antes de publicar, leia [docs/homologacao.md](docs/homologacao.md) para configurar Convex + Resend e suas credenciais de forma segura.
 
 **Segurança:** nunca commit `.env.local`, `RESEND_API_KEY`, `JWT_PRIVATE_KEY` ou credenciais de implantação. `VITE_CONVEX_URL` é pública. A publicação e a operação comercial exigem validação de entrega real do e-mail, LGPD, backup, custos e cobrança recorrente.
