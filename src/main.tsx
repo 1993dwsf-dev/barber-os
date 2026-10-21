@@ -161,7 +161,7 @@ createRoot(document.getElementById("root")!).render(
               />
               <Route
                 path="/onboarding"
-                element={<Protected><Onboarding /></Protected>}
+                element={<RequireAuth><OrgProvider><Onboarding /></OrgProvider></RequireAuth>}
               />
 
               <Route path="/dashboard" element={<Navigate to="/app" replace />} />
