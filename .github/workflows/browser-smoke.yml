@@ -1,7 +1,7 @@
 name: Browser smoke (Convex isolado)
 on:
   pull_request:
-    branches: [audit/p0-financial-security]
+    branches: [audit/p0-financial-security, staging]
   workflow_dispatch:
 permissions:
   contents: read
