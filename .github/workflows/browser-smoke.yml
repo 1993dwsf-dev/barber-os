@@ -1,0 +1,66 @@
+name: Browser smoke (Convex isolado)
+on:
+  pull_request:
+    branches: [audit/p0-financial-security]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  e2e:
+    name: Visitante, demo, agenda, PDV, caixa e mobile
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependências e Chromium
+        run: |
+          bun install --frozen-lockfile
+          python -m pip install playwright==1.56.0
+          python -m playwright install --with-deps chromium
+      - name: Navegar na aplicação com banco local descartável
+        timeout-minutes: 12
+        env:
+          SMOKE_BASE_URL: http://127.0.0.1:5173
+        run: |
+          set -euo pipefail
+          bunx convex dev > /tmp/convex-browser-smoke.log 2>&1 &
+          CONVEX_PID=$!
+          VITE_PID=""
+          trap 'kill "$CONVEX_PID" 2>/dev/null || true; if [ -n "$VITE_PID" ]; then kill "$VITE_PID" 2>/dev/null || true; fi' EXIT
+          ready=0
+          for i in $(seq 1 90); do
+            if [ -f .env.local ] && grep -q "VITE_CONVEX_URL=" .env.local && grep -q "Convex functions ready" /tmp/convex-browser-smoke.log; then ready=1; break; fi
+            if ! kill -0 "$CONVEX_PID" 2>/dev/null; then tail -n 150 /tmp/convex-browser-smoke.log; exit 1; fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then echo "Convex local não iniciou"; tail -n 150 /tmp/convex-browser-smoke.log; exit 1; fi
+          bun run dev -- --host 127.0.0.1 > /tmp/vite-browser-smoke.log 2>&1 &
+          VITE_PID=$!
+          ready=0
+          for i in $(seq 1 45); do
+            if curl --silent --fail --output /dev/null http://127.0.0.1:5173/auth; then ready=1; break; fi
+            if ! kill -0 "$VITE_PID" 2>/dev/null; then tail -n 150 /tmp/vite-browser-smoke.log; exit 1; fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then echo "Vite não iniciou"; tail -n 150 /tmp/vite-browser-smoke.log; exit 1; fi
+          python scripts/browser_smoke.py
+      - name: Logs em caso de falha
+        if: failure()
+        run: |
+          tail -n 150 /tmp/convex-browser-smoke.log || true
+          tail -n 150 /tmp/vite-browser-smoke.log || true
+      - name: Capturas e evidências
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-smoke
+          path: artifacts/browser-smoke/
+          if-no-files-found: ignore
+          retention-days: 7
