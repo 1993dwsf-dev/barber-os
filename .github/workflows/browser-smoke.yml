@@ -56,8 +56,9 @@ jobs:
           rm -f /tmp/barber-jwt-private /tmp/barber-jwks
           python scripts/fake_otp_gateway.py > /tmp/barber-mail-e2e.log 2>&1 &
           MAIL_PID=$!
-          bunx convex env set VLY_INTEGRATION_BASE_URL "http://127.0.0.1:8765"
-          bunx convex env set VLY_INTEGRATION_KEY "local-smoke-only"
+          bunx convex env set RESEND_API_KEY "local-smoke-only"
+          bunx convex env set RESEND_FROM_EMAIL "Barber OS <acesso@example.test>"
+          bunx convex env set RESEND_API_URL "http://127.0.0.1:8765/emails"
           bun run dev -- --host 127.0.0.1 > /tmp/vite-browser-smoke.log 2>&1 &
           VITE_PID=$!
           ready=0
