@@ -34,15 +34,16 @@ function limitMessage(rule: RateLimitRule, remainingMs: number): string {
 }
 
 /**
- * Conta a tentativa atual. Lança `HttpError` amigável quando o limite da
- * janela é atingido; caso contrário registra a tentativa.
+ * Consome uma tentativa e retorna a mensagem de bloqueio (ou null).
+ * Em mutações que rejeitam entradas do usuário, retorne o erro como dado:
+ * lançar uma exceção reverteria também a gravação da tentativa no Convex.
  */
-export async function enforceRateLimit(
+export async function consumeRateLimit(
   ctx: MutationCtx,
   userId: string,
   action: RateLimitAction,
   extraKey?: string,
-): Promise<void> {
+): Promise<string | null> {
   const rule = RATE_LIMITS[action];
   const key = `${action}:${userId}${extraKey ? `:${extraKey}` : ""}`;
   const now = Date.now();
@@ -64,7 +65,7 @@ export async function enforceRateLimit(
   }
 
   if (activeCount >= rule.limit) {
-    throw new HttpError(limitMessage(rule, oldestActive + rule.windowMs - now));
+    return limitMessage(rule, oldestActive + rule.windowMs - now);
   }
 
   await ctx.db.insert("rateLimits", {
@@ -74,6 +75,18 @@ export async function enforceRateLimit(
     createdAt: now,
     expiresAt: now + rule.windowMs,
   });
+  return null;
+}
+
+/** Mantém o comportamento de exceção para ações que terminam com sucesso. */
+export async function enforceRateLimit(
+  ctx: MutationCtx,
+  userId: string,
+  action: RateLimitAction,
+  extraKey?: string,
+): Promise<void> {
+  const message = await consumeRateLimit(ctx, userId, action, extraKey);
+  if (message) throw new HttpError(message);
 }
 
 /** Libera a janela (usado quando a tentativa deu certo, ex.: convite correto). */
