@@ -12,7 +12,8 @@
     "loadtest": "bun run scripts/loadtest.ts",
     "check:schema": "bun run scripts/by-org-check.ts",
     "format": "prettier --write .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:pages": "node scripts/check-pages-env.mjs && bun run build"
   },
   "dependencies": {
     "@convex-dev/auth": "^0.0.96",
