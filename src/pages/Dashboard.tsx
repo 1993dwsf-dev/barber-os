@@ -36,7 +36,7 @@ import { useMemo } from "react";
 import { EmptyState, Loading, PageHeader, SectionTitle, StatCard, Tone } from "@/components/glass";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { APPOINTMENT_STATUS_LABELS, PAYMENT_LABELS, brl, fmtDate, fmtPhone, whatsappLink } from "@/lib/format";
+import { APPOINTMENT_STATUS_LABELS, PAYMENT_LABELS, brl, fmtDate, fmtPhone } from "@/lib/format";
 import { todayISO } from "@/lib/dates";
 import { useOrg } from "@/lib/org-context";
 
@@ -593,7 +593,6 @@ export default function Dashboard() {
                   ))}
                 </ul>
               )}
-            </div>
             </div>
           </div>
         </section>

@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "bun test",
-    "test:backend": "vitest run tests/backendrules.test.ts",
+    "test:backend": "vitest run",
     "loadtest": "bun run scripts/loadtest.ts",
     "check:schema": "bun run scripts/by-org-check.ts",
     "format": "prettier --write .",
@@ -52,7 +52,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
-    "convex": "^1.30.0",
+    "convex": "^1.43.0",
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "^12.23.25",
@@ -95,6 +95,6 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.1",
     "vite": "^7.2.6",
-    "vitest": "^3"
+    "vitest": "^5.0.5"
   }
 }

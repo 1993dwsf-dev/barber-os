@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { EmptyState, Loading, PageHeader, SectionTitle, Tone } from "@/components/glass";
+import { EmptyState, Loading, PageHeader, SectionTitle } from "@/components/glass";
 import { PAYMENT_LABELS, brl, centsToInput, fmtDate, reaisToCents } from "@/lib/format";
 import { useOrg } from "@/lib/org-context";
 

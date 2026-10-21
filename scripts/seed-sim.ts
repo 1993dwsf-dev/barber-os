@@ -13,6 +13,8 @@
 import schema from "../src/convex/schema";
 import { seedDemoData } from "../src/convex/seed";
 import { defaultSettings } from "../src/convex/orgs";
+import type { Id } from "../src/convex/_generated/dataModel";
+import type { MutationCtx } from "../src/convex/_generated/server";
 
 type Row = { _id: string; [k: string]: unknown };
 
@@ -49,21 +51,78 @@ const byteSize = (v: unknown): number => JSON.stringify(v ?? null)?.length ?? 0;
 
 type Pred = (row: Row) => boolean;
 
-const makePredicate = (fn: (q: any) => unknown): Pred => {
-  const f = fn;
-  const api: any = {
-    field: (name: string) => name,
-    eq: (a: unknown, b: unknown) => () => (a === b ? true : a !== undefined && typeof a === "object" && b !== undefined && typeof b === "object" ? JSON.stringify(a) === JSON.stringify(b) : false),
-    neq: (a: unknown, b: unknown) => () => a !== b,
-    gt: (a: unknown, b: unknown) => () => (a as number) > (b as number),
-    gte: (a: unknown, b: unknown) => () => (a as number) >= (b as number),
-    lt: (a: unknown, b: unknown) => () => (a as number) < (b as number),
-    lte: (a: unknown, b: unknown) => () => (a as number) <= (b as number),
-    and: (...args: any[]) => () => args.every((a) => a()),
-    or: (...args: any[]) => () => args.some((a) => a()),
-    not: (arg: any) => () => !arg(),
+type FilterBuilder = {
+  field: (name: string) => (row: Row) => unknown;
+  eq: (a: unknown, b: unknown) => Pred;
+  neq: (a: unknown, b: unknown) => Pred;
+  gt: (a: unknown, b: unknown) => Pred;
+  gte: (a: unknown, b: unknown) => Pred;
+  lt: (a: unknown, b: unknown) => Pred;
+  lte: (a: unknown, b: unknown) => Pred;
+  and: (...conditions: Pred[]) => Pred;
+  or: (...conditions: Pred[]) => Pred;
+  not: (condition: Pred) => Pred;
+};
+
+const evaluate = (value: unknown, row: Row): unknown =>
+  typeof value === "function"
+    ? (value as (row: Row) => unknown)(row)
+    : value;
+
+const makePredicate = (fn: (q: FilterBuilder) => Pred): Pred => {
+  const compare = (
+    a: unknown,
+    b: unknown,
+    predicate: (left: unknown, right: unknown) => boolean
+  ): Pred => {
+    return (row) => predicate(evaluate(a, row), evaluate(b, row));
   };
-  return f(api) as Pred;
+
+  const api: FilterBuilder = {
+    field: (name) => (row) => row[name],
+
+    eq: (a, b) =>
+      compare(a, b, (left, right) => {
+        if (Object.is(left, right)) return true;
+
+        if (
+          left !== null &&
+          right !== null &&
+          typeof left === "object" &&
+          typeof right === "object"
+        ) {
+          return JSON.stringify(left) === JSON.stringify(right);
+        }
+
+        return false;
+      }),
+
+    neq: (a, b) =>
+      compare(a, b, (left, right) => left !== right),
+
+    gt: (a, b) =>
+      compare(a, b, (left, right) => (left as number) > (right as number)),
+
+    gte: (a, b) =>
+      compare(a, b, (left, right) => (left as number) >= (right as number)),
+
+    lt: (a, b) =>
+      compare(a, b, (left, right) => (left as number) < (right as number)),
+
+    lte: (a, b) =>
+      compare(a, b, (left, right) => (left as number) <= (right as number)),
+
+    and: (...conditions) =>
+      (row) => conditions.every((condition) => condition(row)),
+
+    or: (...conditions) =>
+      (row) => conditions.some((condition) => condition(row)),
+
+    not: (condition) =>
+      (row) => !condition(row),
+  };
+
+  return fn(api);
 };
 
 /* ------------------------------ query ------------------------------ */
@@ -76,15 +135,32 @@ const cmp = (a: unknown, b: unknown): number => {
   return String(a) < String(b) ? -1 : 1;
 };
 
+type SimulatedIndex = {
+  indexDescriptor: string;
+  fields: string[];
+};
+
+type SimulatedTable = {
+  indexes?: SimulatedIndex[] | Record<string, SimulatedIndex>;
+};
+
 const indexFields = (table: string, index: string): string[] => {
-  const t = (schema as any).tables[table];
-  const raw = t?.indexes;
-  // O schema expõe `indexes` como um array de `{ indexDescriptor, fields }`.
+  const tables = schema.tables as unknown as Record<
+    string,
+    SimulatedTable
+  >;
+
+  const raw = tables[table]?.indexes;
+
   const idx = Array.isArray(raw)
-    ? raw.find((i: any) => i?.indexDescriptor === index)
+    ? raw.find((item) => item.indexDescriptor === index)
     : raw?.[index];
-  if (!idx) throw new Error(`índice desconhecido ${table}.${index}`);
-  return idx.fields as string[];
+
+  if (!idx) {
+    throw new Error(`índice desconhecido ${table}.${index}`);
+  }
+
+  return idx.fields;
 };
 
 const scan = (table: string, index: string, pred: Pred | null, take: "all" | "one" | number) => {
@@ -117,10 +193,27 @@ const scan = (table: string, index: string, pred: Pred | null, take: "all" | "on
   return out;
 };
 
+type IndexBuilder = {
+  eq(field: string, value: unknown): IndexBuilder;
+  gt(field: string, value: unknown): IndexBuilder;
+  gte(field: string, value: unknown): IndexBuilder;
+  lt(field: string, value: unknown): IndexBuilder;
+  lte(field: string, value: unknown): IndexBuilder;
+};
+
+type SimulatedQuery = {
+  filter(fn: (q: FilterBuilder) => Pred): SimulatedQuery;
+  order(): SimulatedQuery;
+  first(): Promise<Row | null>;
+  unique(): Promise<Row | null>;
+  take(n: number): Promise<Row[]>;
+  collect(): Promise<Row[]>;
+};
+
 const makeQuery = (table: string) => ({
-  withIndex(index: string, builder: (q: any) => unknown) {
+  withIndex(index: string, builder: (q: IndexBuilder) => unknown) {
     const conds: Array<[string, unknown, (a: unknown, b: unknown) => boolean]> = [];
-    const q: any = {
+    const q: IndexBuilder = {
       eq: (field: string, value: unknown) => (conds.push([field, value, (a, b) => a === b]), q),
       gt: (field: string, value: unknown) => (conds.push([field, value, (a, b) => cmp(a, b) > 0]), q),
       gte: (field: string, value: unknown) => (conds.push([field, value, (a, b) => cmp(a, b) >= 0]), q),
@@ -130,8 +223,10 @@ const makeQuery = (table: string) => ({
     builder(q);
     const rangePred: Pred = (row) => conds.every(([f, v, cmpFn]) => cmpFn(row[f], v));
     let filterPred: Pred | null = null;
-    const self: any = {
-      filter(fn: (q: any) => unknown) {
+    const matches: Pred = (row) =>
+  rangePred(row) && (!filterPred || filterPred(row));
+    const self: SimulatedQuery = {
+      filter(fn: (q: FilterBuilder) => Pred) {
         filterPred = makePredicate(fn);
         return self;
       },
@@ -140,7 +235,7 @@ const makeQuery = (table: string) => ({
       },
       async first() {
         bump(stats.readsByTable, `${table}.first`);
-        const rows = scan(table, index, filterPred, "one");
+        const rows = scan(table, index, matches, "one");
         return rows[0] ?? null;
       },
       async unique() {
@@ -148,11 +243,11 @@ const makeQuery = (table: string) => ({
       },
       async take(n: number) {
         bump(stats.readsByTable, `${table}.take`);
-        return scan(table, index, filterPred, n);
+        return scan(table, index, matches, n);
       },
       async collect() {
         bump(stats.readsByTable, `${table}.collect`);
-        return scan(table, index, filterPred, "all");
+        return scan(table, index, matches, "all");
       },
     };
     return self;
@@ -161,7 +256,7 @@ const makeQuery = (table: string) => ({
 
 /* ------------------------------ db ------------------------------ */
 
-const db: any = {
+const db = {
   insert: async (table: string, doc: Record<string, unknown>) => {
     stats.documentsWritten += 1;
     stats.dataWrittenBytes += byteSize(doc);
@@ -224,7 +319,11 @@ store.set(orgId, {
 tableOf.set(orgId, "organizations");
 
 const t0 = performance.now();
-await seedDemoData({ db } as any, orgId as any, userId as any);
+await seedDemoData(
+  { db } as unknown as MutationCtx,
+  orgId as Id<"organizations">,
+  userId as Id<"users">
+);
 const elapsed = performance.now() - t0;
 
 /* ------------------------------ relatório ------------------------------ */

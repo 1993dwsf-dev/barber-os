@@ -241,8 +241,7 @@ export async function recordSale(
     createdBy: userId,
   });
 
-  let commissionTotal = 0;
-  const hasService = resolved.some((r) => r.input.kind === "servico");
+    const hasService = resolved.some((r) => r.input.kind === "servico");
 
   for (const r of resolved) {
     const item = r.input;
@@ -308,11 +307,9 @@ export async function recordSale(
             status: "pendente",
             createdAt: Date.now(),
           });
-          commissionTotal += calc.amount;
         }
       }
     }
-
   }
 
   for (const p of args.payments) {

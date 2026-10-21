@@ -116,8 +116,7 @@ export const dashboard = query({
       .query("commissions")
       .withIndex("by_org_date", (q) => q.eq("organizationId", args.organizationId))
       .collect();
-    const commissionsMonth = commissions.filter((c) => inRange(c.date, month.start, month.end));
-    const commissionsPaid = commissions
+      const commissionsPaid = commissions
       .filter((c) => c.status === "paga" && inRange(c.date, month.start, month.end))
       .reduce((s, c) => s + c.amountCents, 0);
     const commissionsPending = commissions

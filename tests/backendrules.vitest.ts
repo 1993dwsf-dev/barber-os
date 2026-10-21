@@ -32,12 +32,6 @@ type Owner = {
   orgId: Id<"organizations">;
 };
 
-const today = (offsetDays = 0): string => {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  return d.toISOString().slice(0, 10);
-};
-
 /** Cria owner com e-mail verificado (conta recuperável) + organização. */
 async function seedOwner(): Promise<Owner> {
   const { userId, sessionId } = await t.run(async (ctx) => {
@@ -98,7 +92,7 @@ async function seedStaff(owner: Owner, role: "barber" | "cashier" | "viewer") {
   });
   if (role !== "barber") {
     // joinByInviteCode entra como barber; promote via owner
-    await t2.mutation(api.orgs.updateMemberRole, {
+    await owner.t2.mutation(api.orgs.updateMemberRole, {
       organizationId: owner.orgId,
       memberId: await t.run(async (ctx) => {
         const m = await ctx.db
@@ -142,12 +136,6 @@ async function seedCatalog(owner: Owner) {
     phone: "11999990000",
   });
   return { serviceId, barberId, clientId };
-}
-
-/** Resolve o HttpError lançado pelas funções (bad()/requireX) via Bun? Não —
- * via Convex: erros de função chegam como ConvexError genérico no convex-test. */
-function messageOf(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
 }
 
 /* ------------------------------ conta / organização ------------------------------ */

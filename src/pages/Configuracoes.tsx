@@ -43,7 +43,6 @@ export default function Configuracoes() {
   const { orgId, org, role, canEdit } = useOrg();
   const [tab, setTab] = useState("unidade");
 
-  const members = useQuery(api.orgs.listMembers, orgId ? { organizationId: orgId } : "skip");
   const audit = useQuery(
     api.notifications.listAudit,
     orgId ? { organizationId: orgId, limit: 80 } : "skip",
