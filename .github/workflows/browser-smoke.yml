@@ -41,6 +41,18 @@ jobs:
             sleep 2
           done
           if [ "$ready" -ne 1 ]; then echo "Convex local não iniciou"; tail -n 150 /tmp/convex-browser-smoke.log; exit 1; fi
+          # Chaves efêmeras: apenas o Convex local deste job, nunca produção.
+          node <<'NODE'
+          const { generateKeyPairSync } = require("node:crypto");
+          const { writeFileSync } = require("node:fs");
+          const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+          writeFileSync("/tmp/barber-jwt-private", privateKey.export({ type: "pkcs8", format: "pem" }), { mode: 0o600 });
+          writeFileSync("/tmp/barber-jwks", JSON.stringify({ keys: [{ ...publicKey.export({ format: "jwk" }), use: "sig", alg: "RS256" }] }), { mode: 0o600 });
+          NODE
+          bunx convex env set JWT_PRIVATE_KEY "$(cat /tmp/barber-jwt-private)"
+          bunx convex env set JWKS "$(cat /tmp/barber-jwks)"
+          bunx convex env set SITE_URL "http://127.0.0.1:5173"
+          rm -f /tmp/barber-jwt-private /tmp/barber-jwks
           bun run dev -- --host 127.0.0.1 > /tmp/vite-browser-smoke.log 2>&1 &
           VITE_PID=$!
           ready=0
