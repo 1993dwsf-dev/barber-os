@@ -7,10 +7,10 @@ export function authorizeEmail(
   config: { siteUrl: string; stagingEmail?: string; commercialEnabled: boolean },
 ): string {
   const email = input.trim().toLowerCase();
-  if (email.length > 254 || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new Error("Informe um e-mail válido.");
   }
-  const isLocal = /^http:\/\/(localhost|127\\.0\\.0\\.1):/.test(config.siteUrl);
+  const isLocal = /^http:\/\/(localhost|127\.0\.0\.1):/.test(config.siteUrl);
   if (!isLocal && !config.commercialEnabled) {
     const allowed = config.stagingEmail?.trim().toLowerCase();
     if (!allowed || email !== allowed) {
