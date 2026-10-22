@@ -85,7 +85,7 @@ Estes itens **não** são resolvidos por código deste repositório:
 4. **Rotação de segredos** e revisão periódica de membros com papel de
    owner/admin.
 5. **Monitoramento contínuo de dependências**: a varredura foi executada e zerada
-   (`bun audit` → 0 · `npm audit --package-lock-only` → 0) e agora roda no CI
+   (`bun audit` → 0) e agora roda no CI
    (`.github/workflows/ci.yml`), mas vale habilitar Dependabot/Renovate para
    receber avisos de novas versões.
    O `override` de `@auth/core ^0.41.3` no `package.json` mantém a correção de normalização de e-mail usada pela autenticação.
