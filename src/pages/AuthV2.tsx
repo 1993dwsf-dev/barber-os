@@ -65,7 +65,7 @@ export default function AuthV2({ redirectAfterAuth = "/app" }: { redirectAfterAu
         password,
         flow: step,
       }));
-      if (done === false) {
+      if (!done.signingIn) {
         setPassword("");
         setCode("");
         setStep("verify");
