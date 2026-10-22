@@ -38,8 +38,14 @@ Fonte: https://resend.com/docs e https://resend.com/pricing.
 | `JWKS` | conjunto público correspondente à mesma chave |
 | `SITE_URL` | URL real do Cloudflare Pages, após sua criação |
 
-6. Gere o par `JWT_PRIVATE_KEY`/`JWKS` conforme o [guia oficial Convex Auth](https://labs.convex.dev/auth/setup) (veja a configuração manual); **não use chaves dos testes automatizados em serviços públicos**.
-7. Publique as funções no deployment de homologação por `bunx convex dev --once` depois de selecionar o deployment cloud.
+6. Gere o par `JWT_PRIVATE_KEY`/`JWKS` **sem exibir nem copiar segredos**, usando o script versionado no projeto. No Codespaces, com o repositório atualizado na branch `staging`, autentique a CLI do Convex na conta correta (por exemplo, `bunx convex login`, se solicitado), e execute:
+
+   ```bash
+   node scripts/configure-staging-auth-keys.mjs unique-tortoise-387
+   ```
+
+   O script foi restrito ao deployment **Development (Cloud) `unique-tortoise-387`**, verifica os nomes das três variáveis já cadastradas, gera um par RSA de 2048 bits e envia as chaves diretamente para o Convex sem imprimir o conteúdo. Se `JWT_PRIVATE_KEY` e `JWKS` já existirem, não substitui valores. Para gerar manualmente, siga o [guia oficial Convex Auth](https://labs.convex.dev/auth/setup/manual). Nunca use chaves do CI ou exiba os segredos em capturas.
+7. Confirme no dashboard de Development (Cloud) que **JWT_PRIVATE_KEY** e **JWKS** aparecem na lista (não abra os valores). Publique então as funções por `bunx convex dev --once` depois de selecionar o deployment cloud correto em `bunx convex dev --configure`. Não execute deploy em Production.
 8. Copie **somente a URL pública do Convex cloud** terminada em `.convex.cloud` — ela será usada na próxima etapa. **Nunca use o endereço `http://127.0.0.1:3210` ou `*.convex.site` no frontend.**
 
 A `CONVEX_SITE_URL` é gerada pelo Convex (HTTP Actions); ela não é `SITE_URL`, que deve ser o endereço HTTPS do site no Pages.
