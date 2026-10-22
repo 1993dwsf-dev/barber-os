@@ -2,7 +2,7 @@ import type { AuthConfig } from "convex/server";
 
 /**
  * Apenas tokens emitidos pelo Convex Auth deste deployment são aceitos.
- * A antiga identidade federada Freebuff/Vly foi desativada.
+ * A autenticação é independente de provedores externos de identidade.
  */
 export default {
   providers: [

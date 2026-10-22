@@ -1,4 +1,4 @@
-# Segurança e operação — BarberFlow OS
+# Segurança e operação — Barber OS
 
 Documento curto para quem for manter, auditar ou colocar o sistema em produção.
 Descreve **o que já está implementado no código** e **o que ainda depende de
@@ -66,10 +66,9 @@ configuração/infra**.
 - O `RootErrorBoundary` só mostra stack trace em desenvolvimento
   (`import.meta.env.DEV`); em produção exibe mensagem genérica e orienta
   recarregar.
-- Nenhuma chave é embutida no frontend. O código do Convex lê segredos de
-  variáveis de ambiente do deployment (`VLY_INTEGRATION_KEY`,
-  `VLY_INTEGRATION_BASE_URL`), gerenciadas pela plataforma — não edite `.env`
-  manualmente.
+- Nenhuma chave privada deve ser embutida no frontend. O backend Convex lê
+  `RESEND_API_KEY`, `JWT_PRIVATE_KEY` e `JWKS` das variáveis de ambiente do
+  deployment Convex; nunca adicione esses valores ao Cloudflare Pages ou ao Git.
 
 ## 6. O que ainda depende de infra/configuração
 
@@ -86,14 +85,11 @@ Estes itens **não** são resolvidos por código deste repositório:
 4. **Rotação de segredos** e revisão periódica de membros com papel de
    owner/admin.
 5. **Monitoramento contínuo de dependências**: a varredura foi executada e zerada
-   (`bun audit` → 0 · `npm audit --package-lock-only` → 0) e agora roda no CI
+   (`bun audit` → 0) e agora roda no CI
    (`.github/workflows/ci.yml`), mas vale habilitar Dependabot/Renovate para
    receber avisos de novas versões.
-   Dois `overrides` no `package.json` sustentam isso: `@auth/core ^0.41.3`
-   (aviso crítico de normalização de e-mail, usado pelo login) e `ai 5.0.209`
-   (a linha nova do AI SDK traz `undici` 5.x/@fastify/busboy vulneráveis; o
-   `ai` vem do pacote de integração da plataforma, não é importado pelo app).
-   Os dois lockfiles (`bun.lock` e `package-lock.json`) estão sincronizados.
+   O `override` de `@auth/core ^0.41.3` no `package.json` mantém a correção de normalização de e-mail usada pela autenticação.
+   O projeto usa apenas o `bun.lock` como lockfile oficial. O `package-lock.json` antigo foi removido por não representar fielmente as dependências atuais.
 6. **Teste de carga** antes de abrir para muitos usuários: o script está pronto
    (`bun run loadtest`), falta apenas rodar com o volume real.
 7. **Verificação de login/render no navegador** após subir dependências de auth:
