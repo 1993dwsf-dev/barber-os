@@ -18,7 +18,7 @@ test("nunca publica sem URL do Convex", () => {
 test("não aceita URL Convex insegura ou falsa", () => {
   for (const url of [
     "http://friendly-mantis-123.convex.cloud",
-    "https://freebuff.com",
+    "https://example.org",
     "http://localhost:3210",
     "https://friendly-mantis-123.convex.cloud/path",
     "https://friendly-mantis-123.convex.cloud?token=bad",

@@ -1,4 +1,4 @@
-# Segurança e operação — BarberFlow OS
+# Segurança e operação — Barber OS
 
 Documento curto para quem for manter, auditar ou colocar o sistema em produção.
 Descreve **o que já está implementado no código** e **o que ainda depende de
@@ -66,10 +66,9 @@ configuração/infra**.
 - O `RootErrorBoundary` só mostra stack trace em desenvolvimento
   (`import.meta.env.DEV`); em produção exibe mensagem genérica e orienta
   recarregar.
-- Nenhuma chave é embutida no frontend. O código do Convex lê segredos de
-  variáveis de ambiente do deployment (`VLY_INTEGRATION_KEY`,
-  `VLY_INTEGRATION_BASE_URL`), gerenciadas pela plataforma — não edite `.env`
-  manualmente.
+- Nenhuma chave privada deve ser embutida no frontend. O backend Convex lê
+  `RESEND_API_KEY`, `JWT_PRIVATE_KEY` e `JWKS` das variáveis de ambiente do
+  deployment Convex; nunca adicione esses valores ao Cloudflare Pages ou ao Git.
 
 ## 6. O que ainda depende de infra/configuração
 
@@ -92,7 +91,7 @@ Estes itens **não** são resolvidos por código deste repositório:
    Dois `overrides` no `package.json` sustentam isso: `@auth/core ^0.41.3`
    (aviso crítico de normalização de e-mail, usado pelo login) e `ai 5.0.209`
    (a linha nova do AI SDK traz `undici` 5.x/@fastify/busboy vulneráveis; o
-   `ai` vem do pacote de integração da plataforma, não é importado pelo app).
+   `ai` permanece como dependência transitiva de um pacote legado que não é importado pelo aplicativo e será revisado ao regenerar os lockfiles).
    Os dois lockfiles (`bun.lock` e `package-lock.json`) estão sincronizados.
 6. **Teste de carga** antes de abrir para muitos usuários: o script está pronto
    (`bun run loadtest`), falta apenas rodar com o volume real.

@@ -16,7 +16,7 @@ Agenda e clientes, equipe, serviços, produtos, estoque, PDV, caixa, despesas, r
 4. Defina as variáveis privadas no **deployment Convex**, conforme [docs/homologacao.md](docs/homologacao.md).
 5. Execute `bun run dev`.
 
-O login usa **Convex Auth** com códigos de seis dígitos enviados pela **API Resend**. O identificador interno `email-otp` foi mantido. A autenticação federada de Freebuff/Vly e o toolbar foram desligados. Sessões antigas originadas desse emissor precisarão de novo login. Algumas dependências históricas ainda podem constar do lockfile até uma limpeza de dependências separada.
+O login usa **Convex Auth** com códigos de seis dígitos enviados pela **API Resend**. O identificador interno `email-otp` foi mantido. O login não depende do ambiente em que o sistema foi originalmente desenvolvido. Sessões anteriores à migração para Convex Auth precisarão de novo login. Dependências legadas ainda presentes nos lockfiles serão revisadas em uma limpeza separada, com regeneração e validação dos arquivos de dependências.
 
 ## Testes
 
