@@ -72,6 +72,9 @@ function main() {
       "Use: node scripts/configure-staging-auth-keys.mjs unique-tortoise-387",
     );
   }
+  if (deployment !== "unique-tortoise-387") {
+    throw new Error("Script autorizado apenas para o Development (Cloud) unique-tortoise-387.");
+  }
   console.log("[Convex] Verificando o deployment:", deployment);
   const listArgs = ["env", "list", "--names-only", "--deployment", deployment];
   const before = new Set(convex(listArgs).split(/\r?\n/).map((s) => s.trim()).filter(Boolean));
