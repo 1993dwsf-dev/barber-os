@@ -50,7 +50,6 @@ const googleProvider = Google({
       name: profile.name ?? undefined,
       email: authorizeCurrentEmail(profile.email),
       image: profile.picture ?? undefined,
-      emailVerified: true,
     };
   },
 });
