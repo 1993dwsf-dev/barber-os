@@ -54,7 +54,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 raise ValueError("invalid sender")
             if not isinstance(payload.get("subject"), str) or not payload["subject"]:
                 raise ValueError("invalid subject")
-            match = re.search(r"\b\d{6}\b", payload["text"])
+            match = re.search(r"\b(?:\d{6}|\d{8})\b", payload["text"])
             if match is None:
                 raise ValueError("OTP not found")
             OUTPUT.write_text(json.dumps({"to": recipients[0], "otp": match.group(0)}))
