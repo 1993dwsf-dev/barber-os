@@ -36,7 +36,7 @@ export function LogoDropdown() {
         <Button variant="ghost" size="icon" className="h-10 w-10">
           <img
             src={logo}
-            alt="Logo"
+            alt="Logotipo do Barber OS"
             width={32}
             height={32}
             className="rounded-lg"
