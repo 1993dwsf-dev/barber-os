@@ -88,11 +88,8 @@ Estes itens **não** são resolvidos por código deste repositório:
    (`bun audit` → 0 · `npm audit --package-lock-only` → 0) e agora roda no CI
    (`.github/workflows/ci.yml`), mas vale habilitar Dependabot/Renovate para
    receber avisos de novas versões.
-   Dois `overrides` no `package.json` sustentam isso: `@auth/core ^0.41.3`
-   (aviso crítico de normalização de e-mail, usado pelo login) e `ai 5.0.209`
-   (a linha nova do AI SDK traz `undici` 5.x/@fastify/busboy vulneráveis; o
-   `ai` permanece como dependência transitiva de um pacote legado que não é importado pelo aplicativo e será revisado ao regenerar os lockfiles).
-   Os dois lockfiles (`bun.lock` e `package-lock.json`) estão sincronizados.
+   O `override` de `@auth/core ^0.41.3` no `package.json` mantém a correção de normalização de e-mail usada pela autenticação.
+   O projeto usa apenas o `bun.lock` como lockfile oficial. O `package-lock.json` antigo foi removido por não representar fielmente as dependências atuais.
 6. **Teste de carga** antes de abrir para muitos usuários: o script está pronto
    (`bun run loadtest`), falta apenas rodar com o volume real.
 7. **Verificação de login/render no navegador** após subir dependências de auth:
