@@ -1,1 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 96.81 96.81"><rect width="96.81" height="96.81" rx="18"/><g fill="#fff"><rect x="24.67" y="24.67" width="47.47" height="11.87"/><rect x="24.67" y="36.54" width="11.87" height="35.61"/><rect x="40.06" y="39.98" width="23.74" height="11.87"/><rect x="40.06" y="51.85" width="11.87" height="20.3"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Barber OS">
+  <defs>
+    <clipPath id="pole"><rect x="23" y="14" width="18" height="36" rx="2"/></clipPath>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#111827"/>
+  <rect x="20" y="9" width="24" height="46" rx="6" fill="#CBD5E1"/>
+  <rect x="23" y="14" width="18" height="36" rx="2" fill="#F8FAFC"/>
+  <g clip-path="url(#pole)">
+    <path d="M14 22 28 8 54 34 40 48Z" fill="#DC2626"/>
+    <path d="M12 43 26 29 52 55 38 69Z" fill="#2563EB"/>
+    <path d="M24 10 30 4 56 30 50 36Z" fill="#2563EB"/>
+  </g>
+  <rect x="19" y="9" width="26" height="6" rx="3" fill="#E2E8F0"/>
+  <rect x="19" y="49" width="26" height="6" rx="3" fill="#E2E8F0"/>
+</svg>
