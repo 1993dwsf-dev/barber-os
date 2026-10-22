@@ -1,15 +1,64 @@
 import { convexAuth } from "@convex-dev/auth/server";
 import { Anonymous } from "@convex-dev/auth/providers/Anonymous";
+import { Password } from "@convex-dev/auth/providers/Password";
+import Google from "@auth/core/providers/google";
 import { emailOtp } from "./auth/emailOtp";
+import { passwordReset, passwordVerification } from "./auth/passwordOtp";
+import { authorizeCurrentEmail } from "./auth/accessPolicy";
 
 /**
- * Esta branch é exclusiva de homologação.
- * Acesso visitante só é permitido no Convex LOCAL usado pelo teste Chromium;
- * os deployments hospedados aceitam exclusivamente o provider de e-mail.
+ * Migração gradual: o OTP continua disponível na homologação.
+ * Nenhum provedor novo é habilitado sem flag explícita no backend.
+ * No ambiente hospedado de testes, o cadastro é restrito ao e-mail permitido.
  */
 const site = process.env.CONVEX_SITE_URL ?? "";
 const localBackend = /^http:\/\/(localhost|127\.0\.0\.1):/.test(site);
+const authV2 = process.env.BARBER_AUTH_V2_ENABLED === "true";
+const googleReady =
+  authV2 &&
+  process.env.BARBER_GOOGLE_AUTH_ENABLED === "true" &&
+  Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET);
+
+const passwordProvider = Password({
+  reset: passwordReset,
+  verify: passwordVerification,
+  profile(params) {
+    if (typeof params.email !== "string") {
+      throw new Error("Informe um e-mail válido.");
+    }
+    return { email: authorizeCurrentEmail(params.email) };
+  },
+  validatePasswordRequirements(secret) {
+    if (
+      secret.length < 10 ||
+      secret.length > 128 ||
+      !/[a-zA-Z]/.test(secret) ||
+      !/[0-9]/.test(secret)
+    ) {
+      throw new Error("A senha deve ter entre 10 e 128 caracteres, com letras e números.");
+    }
+  },
+});
+
+const googleProvider = Google({
+  profile(profile) {
+    if (!profile.sub || !profile.email || profile.email_verified !== true) {
+      throw new Error("A conta Google precisa ter um e-mail verificado.");
+    }
+    return {
+      id: profile.sub,
+      name: profile.name ?? undefined,
+      email: authorizeCurrentEmail(profile.email),
+      image: profile.picture ?? undefined,
+    };
+  },
+});
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
-  providers: [emailOtp, ...(localBackend ? [Anonymous] : [])],
+  providers: [
+    emailOtp,
+    ...(authV2 ? [passwordProvider] : []),
+    ...(googleReady ? [googleProvider] : []),
+    ...(localBackend ? [Anonymous] : []),
+  ],
 });

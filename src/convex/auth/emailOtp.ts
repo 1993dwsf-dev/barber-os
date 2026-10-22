@@ -17,7 +17,11 @@ function emailEndpoint(): string {
   return override;
 }
 
-async function sendAccessCode(email: string, token: string): Promise<void> {
+export async function sendAccessCode(
+  email: string,
+  token: string,
+  purpose: "access" | "verification" | "reset" = "access",
+): Promise<void> {
   // Com o remetente de testes Resend, só a conta de origem pode receber OTP.
   // A restrição vale no servidor: esconder campos na interface não seria suficiente.
   const allowedEmail = process.env.BARBER_STAGING_EMAIL?.trim().toLowerCase();
@@ -45,8 +49,13 @@ async function sendAccessCode(email: string, token: string): Promise<void> {
     body: JSON.stringify({
       from,
       to: [email],
-      subject: "Seu código de acesso ao Barber OS",
-      text: `Seu código de acesso ao Barber OS é ${token}.\n\nO código expira em 15 minutos. Se você não solicitou este acesso, ignore a mensagem. Não compartilhe o código.`,
+      subject:
+        purpose === "reset"
+          ? "Redefinição de senha do Barber OS"
+          : purpose === "verification"
+            ? "Confirme seu e-mail no Barber OS"
+            : "Seu código de acesso ao Barber OS",
+      text: `Seu código de ${purpose === "reset" ? "redefinição de senha" : purpose === "verification" ? "verificação de e-mail" : "acesso"} ao Barber OS é ${token}.\n\nO código expira em 15 minutos. Se você não solicitou, ignore. Não compartilhe o código.`,
     }),
   });
 

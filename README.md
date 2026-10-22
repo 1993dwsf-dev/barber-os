@@ -16,7 +16,7 @@ Agenda e clientes, equipe, serviços, produtos, estoque, PDV, caixa, despesas, r
 4. Defina as variáveis privadas no **deployment Convex**, conforme [docs/homologacao.md](docs/homologacao.md).
 5. Execute `bun run dev`.
 
-O login usa **Convex Auth** com códigos de seis dígitos enviados pela **API Resend**. O identificador interno `email-otp` foi mantido. O login não depende do ambiente em que o sistema foi originalmente desenvolvido. Sessões anteriores à migração para Convex Auth precisarão de novo login. O Bun é o gerenciador de dependências oficial do projeto; use `bun install --frozen-lockfile` com o `bun.lock` versionado. O antigo lockfile npm foi removido por estar desatualizado.
+O login usa **Convex Auth** com códigos de seis dígitos enviados pela **API Resend**. Um novo login com senha, recuperação de acesso e Google OAuth está sendo desenvolvido atrás de flags desligadas por padrão; veja [docs/autenticacao-v2.md](docs/autenticacao-v2.md). O identificador interno `email-otp` foi mantido. O login não depende do ambiente em que o sistema foi originalmente desenvolvido. Sessões anteriores à migração para Convex Auth precisarão de novo login. O Bun é o gerenciador de dependências oficial do projeto; use `bun install --frozen-lockfile` com o `bun.lock` versionado. O antigo lockfile npm foi removido por estar desatualizado.
 
 ## Testes
 

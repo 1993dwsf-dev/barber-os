@@ -1,3 +1,4 @@
+import AuthV2 from "./AuthV2";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -292,6 +293,9 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
 }
 
 export default function AuthPage(props: AuthProps) {
+  if (import.meta.env.VITE_AUTH_V2_ENABLED === "true") {
+    return <AuthV2 {...props} />;
+  }
   return (
     <Suspense>
       <Auth {...props} />
