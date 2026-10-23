@@ -1,5 +1,5 @@
 import { api } from "@/convex/_generated/api";
-import type { Id } from "@/convex/_generated/dataModel";
+import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
 import {
   Check,
@@ -13,7 +13,7 @@ import {
   User,
   Wallet,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -44,15 +44,79 @@ type CartLine = {
   barberId?: string;
 };
 
+type LinkedCheckout = {
+  appointment: Doc<"appointments">;
+  client: Doc<"clients"> | null;
+  barber: Doc<"barbers"> | null;
+  service: Doc<"services"> | null;
+};
+
 export default function Pdv() {
-  const { orgId, org } = useOrg();
+  const { orgId } = useOrg();
   const [searchParams, setSearchParams] = useSearchParams();
   const appointmentId = searchParams.get("appointmentId");
-  const preparedAppointment = useRef<string | null>(null);
+  const checkout = useQuery(
+    api.appointments.checkoutDetail,
+    orgId && appointmentId
+      ? { organizationId: orgId, appointmentId: appointmentId as Id<"appointments"> }
+      : "skip",
+  );
+
+  if (!orgId) return <Loading />;
+  if (appointmentId && checkout === undefined) return <Loading label="Carregando atendimento" />;
+
+  if (appointmentId && checkout) {
+    const { appointment, client, barber, service } = checkout;
+    let notice: string | null = null;
+    if (appointment.status === "concluido" || appointment.paymentStatus === "pago" || appointment.saleId)
+      notice = "Este atendimento já foi cobrado. Não é possível gerar uma segunda venda.";
+    else if (appointment.status === "cancelado" || appointment.status === "falta")
+      notice = "Este atendimento não pode ser cobrado porque foi cancelado ou marcado como falta.";
+    else if (!client || !barber || !service)
+      notice = "Cliente, barbeiro ou serviço do atendimento não encontrado.";
+    if (notice) {
+      return (
+        <div className="flex flex-col gap-4">
+          <PageHeader eyebrow="Operação" title="PDV" description="Cobrança vinculada ao agendamento" />
+          <div className="glass rounded-xl p-5">
+            <p className="text-sm text-foreground">{notice}</p>
+            <Button className="mt-4" variant="outline" onClick={() => setSearchParams({}, { replace: true })}>
+              Nova venda avulsa
+            </Button>
+          </div>
+        </div>
+      );
+    }
+  }
+
+  return (
+    <PdvForm
+      key={`${orgId}:${appointmentId ?? "avulsa"}`}
+      appointmentId={appointmentId}
+      checkout={appointmentId ? (checkout as LinkedCheckout) : null}
+      onClear={() => setSearchParams({}, { replace: true })}
+    />
+  );
+}
+
+/** Carrinho tem ciclo de vida próprio por agendamento, sem efeitos de setState. */
+function PdvForm({
+  appointmentId, checkout, onClear,
+}: {
+  appointmentId: string | null;
+  checkout: LinkedCheckout | null;
+  onClear: () => void;
+}) {
+  const { orgId, org } = useOrg();
   const [term, setTerm] = useState("");
-  const [cart, setCart] = useState<CartLine[]>([]);
-  const [clientId, setClientId] = useState("");
-  const [barberId, setBarberId] = useState("");
+  const [cart, setCart] = useState<CartLine[]>(() => checkout && checkout.service && checkout.barber ? [{
+    key: `appointment-${checkout.appointment._id}`,
+    kind: "servico", refId: checkout.service._id, name: checkout.service.name,
+    qty: 1, unitPriceCents: checkout.appointment.priceCents, costCents: 0,
+    barberId: checkout.barber._id,
+  }] : []);
+  const [clientId, setClientId] = useState(checkout?.client?._id ?? "");
+  const [barberId, setBarberId] = useState(checkout?.barber?._id ?? "");
   const [discount, setDiscount] = useState("");
   const [payments, setPayments] = useState<PayLine[]>([{ method: "pix", amountCents: 0 }]);
   const [busy, setBusy] = useState(false);
@@ -68,54 +132,7 @@ export default function Pdv() {
       ? { organizationId: orgId, search: term, limit: 8, sort: "nome" }
       : "skip",
   );
-  const checkout = useQuery(
-    api.appointments.checkoutDetail,
-    orgId && appointmentId
-      ? { organizationId: orgId, appointmentId: appointmentId as Id<"appointments"> }
-      : "skip",
-  );
   const createSale = useMutation(api.sales.createSale);
-
-  useEffect(() => {
-    if (!appointmentId) {
-      preparedAppointment.current = null;
-      return;
-    }
-    if (!checkout || preparedAppointment.current === appointmentId) return;
-    const { appointment, client, barber, service } = checkout;
-    if (appointment.status === "concluido" || appointment.paymentStatus === "pago" || appointment.saleId) {
-      setError("Este atendimento já foi cobrado. Não é possível criar outra venda para ele.");
-      setCart([]);
-      preparedAppointment.current = appointmentId;
-      return;
-    }
-    if (appointment.status === "cancelado" || appointment.status === "falta") {
-      setError("Este atendimento não pode ser cobrado porque foi cancelado ou marcado como falta.");
-      setCart([]);
-      preparedAppointment.current = appointmentId;
-      return;
-    }
-    if (!client || !barber || !service) {
-      setError("Cliente, barbeiro ou serviço do atendimento não encontrado.");
-      return;
-    }
-    setCart([{
-      key: `appointment-${appointmentId}`,
-      kind: "servico",
-      refId: service._id,
-      name: service.name,
-      qty: 1,
-      unitPriceCents: appointment.priceCents,
-      costCents: 0,
-      barberId: barber._id,
-    }]);
-    setClientId(client._id);
-    setBarberId(barber._id);
-    setDiscount("");
-    setPayments([{ method: "pix", amountCents: 0 }]);
-    setError(null);
-    preparedAppointment.current = appointmentId;
-  }, [checkout, appointmentId]);
   const recent = useQuery(
     api.sales.listSales,
     orgId ? { organizationId: orgId, limit: 12 } : "skip",
@@ -197,7 +214,7 @@ export default function Pdv() {
 
   async function finalize() {
     if (!orgId) return;
-    if (appointmentId && (!checkout || preparedAppointment.current !== appointmentId)) {
+    if (appointmentId && !checkout) {
       setError("Aguarde o carregamento do atendimento.");
       return;
     }
@@ -231,7 +248,7 @@ export default function Pdv() {
           .map((p) => ({ method: p.method, amountCents: p.amountCents })),
       });
       setLastSale(`${result.saleId}`);
-      if (appointmentId) setSearchParams({}, { replace: true });
+      if (appointmentId) onClear();
       setCart([]);
       setDiscount("");
       setPayments([{ method: "pix", amountCents: 0 }]);
@@ -261,7 +278,7 @@ export default function Pdv() {
               ? "Carregando atendimento para cobrança…"
               : `Cobrança vinculada: ${checkout.client?.name ?? "cliente"} · ${checkout.service?.name ?? "serviço"} · ${brl(checkout.appointment.priceCents)}`}
           </p>
-          <Button size="sm" variant="outline" onClick={() => setSearchParams({}, { replace: true })}>
+          <Button size="sm" variant="outline" onClick={onClear}>
             Nova venda avulsa
           </Button>
         </div>
