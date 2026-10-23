@@ -9,8 +9,8 @@
  * Executar: bun run test:backend  (runner do vitest).
  */
 import { convexTest } from "convex-test";
-import { beforeEach, expect, test } from "vitest";
-import { api } from "../src/convex/_generated/api";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { api, internal } from "../src/convex/_generated/api";
 import type { Id } from "../src/convex/_generated/dataModel";
 import schema from "../src/convex/schema";
 import { validateStoredFileMetadata } from "../src/convex/fileSecurity";
@@ -23,6 +23,8 @@ let t: ReturnType<typeof convexTest<typeof schema>>;
 beforeEach(() => {
   t = convexTest(schema, modules);
 });
+
+afterEach(() => vi.unstubAllEnvs());
 
 /* ------------------------------ helpers ------------------------------ */
 
@@ -549,4 +551,105 @@ test("despesas rejeitam anexos com Content-Type não validado", async () => {
     ctx.db.query("expenses").withIndex("by_org_date", q => q.eq("organizationId", owner.orgId)).collect(),
   );
   expect(expenses).toHaveLength(0);
+});
+
+
+// ------------------------------ acesso comercial, convite e trial ------------------------------
+
+/** Usuário autenticado verificado, ainda sem organização. */
+async function makePilotUser(email: string) {
+  const ids = await t.run(async ctx => {
+    const userId = await ctx.db.insert("users", {
+      email, name: email, emailVerificationTime: Date.now(),
+    });
+    const sessionId = await ctx.db.insert("authSessions", {
+      userId, expirationTime: Date.now() + 3600_000,
+    });
+    return { userId, sessionId };
+  });
+  const issuer = "https://test.convex.site";
+  const subject = `${ids.userId}|${ids.sessionId}`;
+  return t.withIdentity({
+    issuer, subject,
+    tokenIdentifier: `${issuer}|${subject}`,
+    emailVerified: true,
+  });
+}
+
+test("modo comercial é fail-closed: bloqueia criação sem convite mesmo sem a flag de billing", async () => {
+  const user = await makePilotUser("pilot@barbearia.test");
+  vi.stubEnv("BARBER_AUTH_COMMERCIAL_ENABLED", "true");
+  vi.stubEnv("BARBER_BILLING_ENFORCED", "false");
+  await expect(user.mutation(api.orgs.createOrganization, {
+    name: "Sem convite",
+  })).rejects.toThrow(/convite comercial/i);
+  await expect(user.mutation(api.orgs.enterDemoMode, {}))
+    .rejects.toThrow(/demonstração indisponível/i);
+});
+
+test("convite de piloto é único, vinculado ao e-mail e cria trial isolado", async () => {
+  const holder = await makePilotUser("primeiro@barbearia.test");
+  const attacker = await makePilotUser("segundo@barbearia.test");
+  const { code } = await t.mutation(internal.orgs.issuePilotInvite, {
+    email: "Primeiro@Barbearia.Test", trialDays: 2,
+  });
+  expect(code).toMatch(/^[0-9a-f]{64}$/);
+  vi.stubEnv("BARBER_BILLING_ENFORCED", "true");
+  await expect(attacker.mutation(api.orgs.createOrganization, {
+    name: "Outra", pilotInviteCode: code,
+  })).rejects.toThrow(/convite comercial inválido/i);
+  const orgId = await holder.mutation(api.orgs.createOrganization, {
+    name: "Barbearia Piloto", pilotInviteCode: code,
+  });
+  const status = await holder.query(api.orgs.commercialStatus, { organizationId: orgId });
+  expect(status.enforced).toBe(true);
+  expect(status.plan).toBe("pilot");
+  expect(status.status).toBe("trialing");
+  expect(status.canWrite).toBe(true);
+  const second = await makePilotUser("primeiro@barbearia.test");
+  await expect(second.mutation(api.orgs.createOrganization, {
+    name: "Duplicação", pilotInviteCode: code,
+  })).rejects.toThrow(/convite comercial inválido/i);
+  const own = await t.run(ctx => ctx.db.get(orgId));
+  expect(own?.name).toBe("Barbearia Piloto");
+});
+
+test("trial expirado bloqueia escrita no Convex, mas permite exportação autorizada", async () => {
+  const holder = await makePilotUser("vencido@barbearia.test");
+  const { code } = await t.mutation(internal.orgs.issuePilotInvite, {
+    email: "vencido@barbearia.test", trialDays: 1,
+  });
+  vi.stubEnv("BARBER_BILLING_ENFORCED", "true");
+  const orgId = await holder.mutation(api.orgs.createOrganization, {
+    name: "Piloto Expirado", pilotInviteCode: code,
+  });
+  await holder.mutation(api.orgs.updateOrganization, {
+    organizationId: orgId, name: "Antes do prazo",
+  });
+  await t.run(async ctx => {
+    const e = await ctx.db.query("organizationEntitlements")
+      .withIndex("by_org", q => q.eq("organizationId", orgId)).unique();
+    await ctx.db.patch(e!._id, { trialEndsAt: Date.now() - 1 });
+  });
+  const status = await holder.query(api.orgs.commercialStatus, { organizationId: orgId });
+  expect(status.canWrite).toBe(false);
+  await expect(holder.mutation(api.orgs.updateOrganization, {
+    organizationId: orgId, name: "Depois do prazo",
+  })).rejects.toThrow(/plano ausente, expirado ou suspenso/i);
+  await expect(holder.mutation(api.orgs.setOnboardingStep, {
+    organizationId: orgId, step: 4,
+  })).rejects.toThrow(/plano ausente, expirado ou suspenso/i);
+  const exported = await holder.mutation(api.backup.exportOrganizationData, {
+    organizationId: orgId,
+  });
+  expect(exported.organization._id).toBe(orgId);
+  expect(exported.organization.name).toBe("Antes do prazo");
+});
+
+test("usuário de outra barbearia não consegue consultar o plano alheio", async () => {
+  const ownerA = await seedOwner("entitle-a@barbearia.test");
+  const ownerB = await seedOwner("entitle-b@barbearia.test");
+  await expect(ownerB.t2.query(api.orgs.commercialStatus, {
+    organizationId: ownerA.orgId,
+  })).rejects.toThrow(/não tem acesso/i);
 });
