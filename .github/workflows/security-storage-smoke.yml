@@ -78,7 +78,7 @@ jobs:
             tail -n 100 /tmp/barber-convex-storage.log
             exit 1
           fi
-          bun <<'JS'
+          bun - <<'JS'
           import { readFileSync } from "node:fs";
           import { strict as assert } from "node:assert";
           import { ConvexHttpClient } from "convex/browser";
