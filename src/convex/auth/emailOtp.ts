@@ -1,5 +1,6 @@
 import { Email } from "@convex-dev/auth/providers/Email";
 import { RandomReader, generateRandomString } from "@oslojs/crypto/random";
+import { authorizeCurrentTransactionalEmail } from "./accessPolicy";
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
@@ -22,23 +23,14 @@ export async function sendAccessCode(
   token: string,
   purpose: "access" | "verification" | "reset" = "access",
 ): Promise<void> {
-  // Com o remetente de testes Resend, só a conta de origem pode receber OTP.
-  // A restrição vale no servidor: esconder campos na interface não seria suficiente.
-  const allowedEmail = process.env.BARBER_STAGING_EMAIL?.trim().toLowerCase();
-  const site = process.env.CONVEX_SITE_URL ?? "";
-  const localBackend = /^http:\/\/(localhost|127\.0\.0\.1):/.test(site);
-  if (!localBackend && !allowedEmail) {
-    throw new Error("Homologação indisponível: configure BARBER_STAGING_EMAIL no Convex.");
-  }
-  if (allowedEmail && email.trim().toLowerCase() !== allowedEmail) {
-    throw new Error("A homologação está restrita ao e-mail autorizado.");
-  }
-
   const key = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM_EMAIL;
   if (!key || !from?.trim()) {
     throw new Error("Envio indisponível: configure RESEND_API_KEY e RESEND_FROM_EMAIL no Convex.");
   }
+  // Preserva a allowlist em homologação e exige remetente próprio no
+  // ambiente comercial. O endereço retornado é normalizado e validado.
+  const recipient = authorizeCurrentTransactionalEmail(email, from);
 
   const response = await fetch(emailEndpoint(), {
     method: "POST",
@@ -48,7 +40,7 @@ export async function sendAccessCode(
     },
     body: JSON.stringify({
       from,
-      to: [email],
+      to: [recipient],
       subject:
         purpose === "reset"
           ? "Redefinição de senha do Barber OS"

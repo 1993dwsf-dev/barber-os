@@ -45,3 +45,12 @@ Guia oficial: https://labs.convex.dev/auth/config/oauth/google
 6. Para venda comercial, também é necessário configurar domínio remetente verificado no Resend, ambiente Convex de produção separado, limites por usuário/conta, recuperação de conta e revisão de segurança.
 
 Guia oficial: https://labs.convex.dev/auth/config/passwords
+
+
+## Preparação do envio comercial (não ativar na homologação)
+
+O envio transacional usa a mesma política do backend para códigos OTP, verificação de e-mail e recuperação de senha. Com `BARBER_AUTH_COMMERCIAL_ENABLED=false`, permanece a restrição ao endereço `BARBER_STAGING_EMAIL`. Com a flag comercial explicitamente ativada em **outro deployment**, o backend somente tenta enviar para novos destinatários se `RESEND_FROM_EMAIL` estiver preenchido e não utilizar remetente `@resend.dev`.
+
+A checagem de endereço **não garante** que o domínio tenha sido verificado: configurar DNS e testar entregabilidade no painel Resend é obrigatório antes de oferecer acesso a clientes. A flag comercial não deve ser ligada antes da implantação de cobrança, gestão de assinaturas, backup e revisão legal.
+
+Veja `docs/prontidao-comercial.md` para os demais bloqueadores de lançamento.
