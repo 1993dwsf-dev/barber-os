@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { audit, bad, requireManage, requireView } from "./lib";
-import { ALLOWED_FILE_MIME_TYPES, MAX_FILE_BYTES } from "./orgs";
+import { assertUploadedFile } from "./fileSecurity";
 import { requiredText, text } from "./validation";
 import { todayISO } from "../lib/dates";
 
@@ -95,23 +95,14 @@ export const create = mutation({
     const notes = text(args.notes, "note", "Observações");
     const fileName = text(args.fileName, "name", "Nome do comprovante");
     const date = args.date ?? todayISO();
-    if (args.fileStorageId) {
-      // Um storageId vindo do cliente não pode apontar para o arquivo de outra
-      // unidade: o anexo passa a ser reivindicado por esta organização, e se já
-      // pertencer a outra o registro é recusado.
-      const existing = await ctx.db
-        .query("files")
-        .withIndex("by_storage", (q) => q.eq("storageId", args.fileStorageId!))
-        .first();
-      if (existing && existing.organizationId !== org._id)
-        bad("Este arquivo pertence a outra unidade.");
-      const mimeType = (args.fileMimeType ?? "application/pdf").trim().toLowerCase();
-      if (!ALLOWED_FILE_MIME_TYPES.includes(mimeType))
-        bad("Formato não permitido. Envie imagem (JPG, PNG, WebP) ou PDF.");
-      const size = args.fileSize ?? 0;
-      if (!Number.isFinite(size) || size <= 0 || size > MAX_FILE_BYTES)
-        bad(`O comprovante deve ter no máximo ${MAX_FILE_BYTES / 1024 / 1024} MB.`);
-    }
+    const checkedFile = args.fileStorageId
+      ? await assertUploadedFile(ctx, {
+          organizationId: org._id,
+          storageId: args.fileStorageId,
+          mimeType: args.fileMimeType ?? "application/pdf",
+          size: args.fileSize ?? 0,
+        })
+      : null;
     const id = await ctx.db.insert("expenses", {
       organizationId: org._id,
       date,
@@ -155,8 +146,8 @@ export const create = mutation({
         recordType: "expenses",
         recordId: id as string,
         name: fileName ?? "comprovante",
-        mimeType: (args.fileMimeType ?? "application/pdf").trim().toLowerCase(),
-        size: args.fileSize ?? 0,
+        mimeType: checkedFile!.mimeType,
+        size: checkedFile!.size,
         uploadedBy: userId as Id<"users">,
         createdAt: Date.now(),
       });
