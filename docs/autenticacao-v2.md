@@ -45,3 +45,11 @@ Guia oficial: https://labs.convex.dev/auth/config/oauth/google
 6. Para venda comercial, também é necessário configurar domínio remetente verificado no Resend, ambiente Convex de produção separado, limites por usuário/conta, recuperação de conta e revisão de segurança.
 
 Guia oficial: https://labs.convex.dev/auth/config/passwords
+
+
+// Atenção: não vincule a abertura comercial à mesma implantação de homologação.
+// A função de envio transacional agora segue a política de autorização do backend:
+// em homologação só o e-mail permitido; em ambiente comercial, exige sinal
+// BARBER_AUTH_COMMERCIAL_ENABLED=true E RESEND_FROM_EMAIL com domínio diferente
+// de @resend.dev. A checagem no código não comprova a verificação do DNS;
+// a confirmação deve ser feita no painel Resend e por teste de entrega real.
