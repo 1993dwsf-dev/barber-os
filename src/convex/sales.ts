@@ -51,7 +51,7 @@ export type PaymentInput = {
 /**
  * Motor de vendas: valida, grava venda/itens/pagamentos e dispara TODOS os efeitos
  * colaterais (estoque, comissões, fidelidade, caixa, histórico do cliente).
- * Usado pelo PDV e pela conclusão de atendimento.
+ * Exclusivo do PDV; a Agenda apenas encaminha o atendimento para cobrança.
  */
 export async function recordSale(
   ctx: MutationCtx,
@@ -77,12 +77,41 @@ export async function recordSale(
     await requireSameOrg(await ctx.db.get(args.clientId as Id<"clients">), org._id, "Cliente");
   if (args.barberId)
     await requireSameOrg(await ctx.db.get(args.barberId as Id<"barbers">), org._id, "Barbeiro");
-  if (args.appointmentId)
-    await requireSameOrg(
+  let appointment: Doc<"appointments"> | null = null;
+  if (args.appointmentId) {
+    appointment = await requireSameOrg(
       await ctx.db.get(args.appointmentId as Id<"appointments">),
       org._id,
       "Agendamento",
     );
+    if (
+      appointment.status === "concluido" ||
+      appointment.status === "cancelado" ||
+      appointment.status === "falta" ||
+      appointment.paymentStatus === "pago" ||
+      appointment.saleId
+    ) bad("Este atendimento já foi pago ou não pode ser cobrado.");
+
+    // Protege também registros legados com venda vinculada, mesmo se
+    // os campos saleId/status do agendamento estiverem desatualizados.
+    const previousSale = await ctx.db.query("sales")
+      .withIndex("by_org_appointment", q =>
+        q.eq("organizationId", org._id).eq("appointmentId", appointment!._id),
+      ).first();
+    if (previousSale) bad("Este atendimento já possui uma venda registrada.");
+
+    if (args.clientId !== appointment.clientId || args.barberId !== appointment.barberId)
+      bad("Cliente ou barbeiro não confere com o agendamento.");
+    const linkedServices = args.items.filter(
+      item => item.kind === "servico" && item.refId === appointment!.serviceId,
+    );
+    if (
+      linkedServices.length !== 1 ||
+      linkedServices[0].qty !== 1 ||
+      linkedServices[0].barberId !== appointment.barberId ||
+      linkedServices[0].unitPriceCents !== appointment.priceCents
+    ) bad("A venda deve incluir uma única vez o serviço e preço combinados no agendamento.");
+  }
 
   const membership = await ctx.db
     .query("organizationMembers")
@@ -163,7 +192,9 @@ export async function recordSale(
 
     // Alterações manuais de preço exigem um papel privilegiado.
     if (item.unitPriceCents !== undefined && !canOverride) {
-      if (item.unitPriceCents !== catalogPrice) {
+      const agreedPrice = appointment && item.kind === "servico" && item.refId === appointment.serviceId
+        ? appointment.priceCents : catalogPrice;
+      if (item.unitPriceCents !== agreedPrice) {
         bad("Você não tem permissão para alterar o preço do catálogo.");
       }
     }
@@ -334,6 +365,19 @@ export async function recordSale(
         createdAt: Date.now(),
       });
     }
+  }
+
+  if (appointment) {
+    await ctx.db.patch(appointment._id, {
+      status: "concluido",
+      paymentStatus: "pago",
+      saleId,
+      updatedAt: Date.now(),
+    });
+    await audit(ctx, org._id, userId, {
+      action: "concluiu", module: "Agenda", recordType: "appointments",
+      recordId: appointment._id, summary: `Atendimento concluído pela venda #${number}`,
+    });
   }
 
   if (args.clientId) {
