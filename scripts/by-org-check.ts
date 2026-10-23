@@ -13,7 +13,7 @@
 import { readFileSync } from "node:fs";
 
 /** Tabelas globais, sem `organizationId` — não precisam do índice. */
-const GLOBAL_TABLES = new Set(["users", "organizations", "rateLimits"]);
+const GLOBAL_TABLES = new Set(["users", "organizations", "rateLimits", "commercialInvites"]);
 
 type Table = { name: string; line: number; hasByOrg: boolean };
 
