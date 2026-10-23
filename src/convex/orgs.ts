@@ -13,6 +13,7 @@ import {
   requireUserId,
   requireView,
 } from "./lib";
+import { getCommercialStatus, isCommercialGateRequired } from "./commercial";
 import { APP_ROLES, type AppRole, type Cap } from "../lib/rbac";
 import { clearRateLimit, consumeRateLimit, enforceRateLimit } from "./rateLimit";
 import { requiredText, text } from "./validation";
@@ -168,6 +169,31 @@ function randomCode(len = 12): string {
   return out;
 }
 
+/**
+ * Distribuição de convites exclusivamente administrativa (internal).
+ * Em piloto, executar via CLI segura do Convex; nunca no frontend.
+ * O código de 256 bits só é retornado ao operador autorizado na criação.
+ */
+export const issuePilotInvite = internalMutation({
+  args: { email: v.string(), trialDays: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const email = args.email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254)
+      bad("E-mail de convite inválido.");
+    const days = args.trialDays ?? 14;
+    if (!Number.isInteger(days) || days < 1 || days > 30)
+      bad("Duração do piloto inválida.");
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    const code = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+    const id = await ctx.db.insert("commercialInvites", {
+      code, email, trialDays: days, createdAt: Date.now(),
+      expiresAt: Date.now() + 7 * 86_400_000,
+    });
+    return { inviteId: id, code };
+  },
+});
+
 /* ------------------------------ queries ------------------------------ */
 
 export const myOrganizations = query({
@@ -185,6 +211,14 @@ export const myOrganizations = query({
       if (org) out.push({ org, role: m.role, memberId: m._id });
     }
     return out;
+  },
+});
+
+export const commercialStatus = query({
+  args: { organizationId: v.id("organizations") },
+  handler: async (ctx, { organizationId }) => {
+    await requireMember(ctx, organizationId);
+    return await getCommercialStatus(ctx, organizationId);
   },
 });
 
@@ -228,6 +262,7 @@ export const createOrganization = mutation({
     phone: v.optional(v.string()),
     address: v.optional(v.string()),
     email: v.optional(v.string()),
+    pilotInviteCode: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -249,6 +284,20 @@ export const createOrganization = mutation({
       );
     }
 
+    // Quando a autenticação comercial OU o paywall estiver habilitado,
+    // criar organização exige convite pré-aprovado, de uso único e com prazo.
+    const commerce = isCommercialGateRequired();
+    let invite: Doc<"commercialInvites"> | null = null;
+    if (commerce) {
+      const code = args.pilotInviteCode?.trim().toLowerCase();
+      if (!code || !/^[0-9a-f]{64}$/.test(code))
+        bad("Convite comercial válido é obrigatório.");
+      invite = await ctx.db.query("commercialInvites")
+        .withIndex("by_code", q => q.eq("code", code)).unique();
+      if (!invite || invite.redeemedAt || invite.expiresAt <= Date.now() ||
+          invite.email !== user.email.trim().toLowerCase())
+        bad("Convite comercial inválido, vencido ou já utilizado.");
+    }
     await enforceRateLimit(ctx, userId, "createOrganization");
     const now = Date.now();
     const name = requiredText(args.name, "name", "Nome da barbearia");
@@ -273,6 +322,18 @@ export const createOrganization = mutation({
       role: "owner",
       createdAt: now,
     });
+    if (invite) {
+      await ctx.db.patch(invite._id, { redeemedAt: now, organizationId: orgId });
+      await ctx.db.insert("organizationEntitlements", {
+        organizationId: orgId,
+        plan: "pilot",
+        status: "trialing",
+        trialEndsAt: now + invite.trialDays * 86_400_000,
+        source: "pilot",
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
     await audit(ctx, orgId, userId, {
       action: "criou",
       module: "Organização",
@@ -555,6 +616,7 @@ export const enterDemoMode = mutation({
   args: {},
   handler: async (ctx) => {
     const userId = await requireUserId(ctx);
+    if (isCommercialGateRequired()) bad("Demonstração indisponível no ambiente comercial.");
     await enforceRateLimit(ctx, userId, "enterDemoMode");
     // Se já participa de uma organização demo, reusa.
     const memberships = await ctx.db

@@ -3,6 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { type AppRole, type Cap, canManage, canView } from "../lib/rbac";
 import { todayISO } from "../lib/dates";
+import { requireCommercialWriteAccess } from "./commercial";
 
 export class HttpError extends Error {}
 
@@ -58,6 +59,7 @@ export async function requireManage(
 ): Promise<MemberCtx> {
   const m = await requireMember(ctx, organizationId);
   if (!canManage(m.role, cap)) throw new HttpError("Sem permissão para executar esta ação.");
+  await requireCommercialWriteAccess(ctx, m.org);
   return m;
 }
 
@@ -67,6 +69,7 @@ export async function requireOwner(
 ): Promise<MemberCtx> {
   const m = await requireMember(ctx, organizationId);
   if (m.role !== "owner") throw new HttpError("Apenas o proprietário pode executar esta ação.");
+  await requireCommercialWriteAccess(ctx, m.org);
   return m;
 }
 

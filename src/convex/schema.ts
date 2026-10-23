@@ -88,6 +88,33 @@ const schema = defineSchema(
       .index("by_owner", ["ownerId"])
       .index("by_invite", ["inviteCode"]),
 
+    /** Convites comerciais administrados SOMENTE por funções internas. */
+    commercialInvites: defineTable({
+      code: v.string(), // 256 bits aleatórios; entregar apenas ao destinatário
+      email: v.string(),
+      trialDays: v.number(),
+      expiresAt: v.number(),
+      createdAt: v.number(),
+      redeemedAt: v.optional(v.number()),
+      organizationId: v.optional(v.id("organizations")),
+    }).index("by_code", ["code"]),
+
+    /** Direito de acesso da organização, controlado somente pelo servidor. */
+    organizationEntitlements: defineTable({
+      organizationId: v.id("organizations"),
+      plan: v.union(v.literal("pilot"), v.literal("basic"), v.literal("pro")),
+      status: v.union(
+        v.literal("trialing"), v.literal("active"), v.literal("past_due"),
+        v.literal("canceled"), v.literal("suspended"),
+      ),
+      trialEndsAt: v.optional(v.number()),
+      periodEndsAt: v.optional(v.number()),
+      graceEndsAt: v.optional(v.number()),
+      source: v.union(v.literal("pilot"), v.literal("billing")),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }).index("by_org", ["organizationId"]),
+
     organizationMembers: defineTable({
       organizationId: v.id("organizations"),
       userId: v.id("users"),

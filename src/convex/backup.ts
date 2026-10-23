@@ -1,7 +1,9 @@
 import { v } from "convex/values";
 import { mutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { audit, requireManage } from "./lib";
+import { audit, requireMember } from "./lib";
+import { canManage } from "../lib/rbac";
+import { HttpError } from "./lib";
 
 /**
  * Exportação dos dados de uma unidade (backup e portabilidade — LGPD).
@@ -55,7 +57,9 @@ type OrgTable =
 export const exportOrganizationData = mutation({
   args: { organizationId: v.id("organizations") },
   handler: async (ctx, args) => {
-    const { org, userId } = await requireManage(ctx, args.organizationId, "settings");
+    // Portabilidade continua disponível após vencimento/suspensão do plano.
+    const { org, userId, role } = await requireMember(ctx, args.organizationId);
+    if (!canManage(role, "settings")) throw new HttpError("Sem permissão para exportar dados.");
     const orgId = org._id;
 
     const byOrg = (table: OrgTable) =>
