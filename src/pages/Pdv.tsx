@@ -276,7 +276,7 @@ function PdvForm({
           <p className="text-sm text-foreground">
             {checkout === undefined
               ? "Carregando atendimento para cobrança…"
-              : `Cobrança vinculada: ${checkout.client?.name ?? "cliente"} · ${checkout.service?.name ?? "serviço"} · ${brl(checkout.appointment.priceCents)}`}
+              : checkout ? `Cobrança vinculada: ${checkout.client?.name ?? "cliente"} · ${checkout.service?.name ?? "serviço"} · ${brl(checkout.appointment.priceCents)}` : "Atendimento indisponível"}
           </p>
           <Button size="sm" variant="outline" onClick={onClear}>
             Nova venda avulsa
