@@ -13,7 +13,8 @@ import {
   User,
   Wallet,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +46,9 @@ type CartLine = {
 
 export default function Pdv() {
   const { orgId, org } = useOrg();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const appointmentId = searchParams.get("appointmentId");
+  const preparedAppointment = useRef<string | null>(null);
   const [term, setTerm] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [clientId, setClientId] = useState("");
@@ -64,7 +68,54 @@ export default function Pdv() {
       ? { organizationId: orgId, search: term, limit: 8, sort: "nome" }
       : "skip",
   );
+  const checkout = useQuery(
+    api.appointments.checkoutDetail,
+    orgId && appointmentId
+      ? { organizationId: orgId, appointmentId: appointmentId as Id<"appointments"> }
+      : "skip",
+  );
   const createSale = useMutation(api.sales.createSale);
+
+  useEffect(() => {
+    if (!appointmentId) {
+      preparedAppointment.current = null;
+      return;
+    }
+    if (!checkout || preparedAppointment.current === appointmentId) return;
+    const { appointment, client, barber, service } = checkout;
+    if (appointment.status === "concluido" || appointment.paymentStatus === "pago" || appointment.saleId) {
+      setError("Este atendimento já foi cobrado. Não é possível criar outra venda para ele.");
+      setCart([]);
+      preparedAppointment.current = appointmentId;
+      return;
+    }
+    if (appointment.status === "cancelado" || appointment.status === "falta") {
+      setError("Este atendimento não pode ser cobrado porque foi cancelado ou marcado como falta.");
+      setCart([]);
+      preparedAppointment.current = appointmentId;
+      return;
+    }
+    if (!client || !barber || !service) {
+      setError("Cliente, barbeiro ou serviço do atendimento não encontrado.");
+      return;
+    }
+    setCart([{
+      key: `appointment-${appointmentId}`,
+      kind: "servico",
+      refId: service._id,
+      name: service.name,
+      qty: 1,
+      unitPriceCents: appointment.priceCents,
+      costCents: 0,
+      barberId: barber._id,
+    }]);
+    setClientId(client._id);
+    setBarberId(barber._id);
+    setDiscount("");
+    setPayments([{ method: "pix", amountCents: 0 }]);
+    setError(null);
+    preparedAppointment.current = appointmentId;
+  }, [checkout, appointmentId]);
   const recent = useQuery(
     api.sales.listSales,
     orgId ? { organizationId: orgId, limit: 12 } : "skip",
@@ -95,6 +146,7 @@ export default function Pdv() {
   if (!orgId) return <Loading />;
 
   function addLine(row: { kind: Kind; id: string; name: string; price: number; cost: number }) {
+    if (appointmentId && row.kind === "servico" && row.id === checkout?.appointment.serviceId) return;
     setCart((prev) => {
       const existing = prev.find((l) => l.kind === row.kind && l.refId === row.id);
       if (existing) {
@@ -121,6 +173,7 @@ export default function Pdv() {
   }
 
   function changeQty(key: string, delta: number) {
+    if (appointmentId && key === `appointment-${appointmentId}`) return;
     setCart((prev) =>
       prev
         .map((l) => (l.key === key ? { ...l, qty: l.qty + delta } : l))
@@ -129,6 +182,7 @@ export default function Pdv() {
   }
 
   function removeLine(key: string) {
+    if (appointmentId && key === `appointment-${appointmentId}`) return;
     setCart((prev) => prev.filter((l) => l.key !== key));
   }
 
@@ -143,6 +197,14 @@ export default function Pdv() {
 
   async function finalize() {
     if (!orgId) return;
+    if (appointmentId && (!checkout || preparedAppointment.current !== appointmentId)) {
+      setError("Aguarde o carregamento do atendimento.");
+      return;
+    }
+    if (appointmentId && (checkout?.appointment.saleId || checkout?.appointment.status === "concluido")) {
+      setError("Este atendimento já possui uma venda.");
+      return;
+    }
     if (cart.length === 0) {
       setError("Adicione itens ao carrinho.");
       return;
@@ -152,6 +214,7 @@ export default function Pdv() {
     try {
       const result = await createSale({
         organizationId: orgId,
+        appointmentId: appointmentId ? (appointmentId as Id<"appointments">) : undefined,
         clientId: clientId ? (clientId as Id<"clients">) : undefined,
         barberId: barberId ? (barberId as Id<"barbers">) : undefined,
         discountCents: discountCents || undefined,
@@ -168,6 +231,7 @@ export default function Pdv() {
           .map((p) => ({ method: p.method, amountCents: p.amountCents })),
       });
       setLastSale(`${result.saleId}`);
+      if (appointmentId) setSearchParams({}, { replace: true });
       setCart([]);
       setDiscount("");
       setPayments([{ method: "pix", amountCents: 0 }]);
@@ -187,8 +251,21 @@ export default function Pdv() {
       <PageHeader
         eyebrow="Operação"
         title="PDV"
-        description="Venda de serviços e produtos com pagamento dividido e baixa automática de estoque."
+        description="Registre a cobrança no PDV. Atendimentos vinculados são concluídos automaticamente, sem duplicidade."
       />
+
+      {appointmentId ? (
+        <div className="glass flex flex-wrap items-center justify-between gap-3 rounded-xl px-4 py-3">
+          <p className="text-sm text-foreground">
+            {checkout === undefined
+              ? "Carregando atendimento para cobrança…"
+              : `Cobrança vinculada: ${checkout.client?.name ?? "cliente"} · ${checkout.service?.name ?? "serviço"} · ${brl(checkout.appointment.priceCents)}`}
+          </p>
+          <Button size="sm" variant="outline" onClick={() => setSearchParams({}, { replace: true })}>
+            Nova venda avulsa
+          </Button>
+        </div>
+      ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
         {/* Catálogo */}
@@ -238,6 +315,7 @@ export default function Pdv() {
                     key={`${row.kind}-${row.id}`}
                     type="button"
                     onClick={() => addLine(row)}
+                    disabled={Boolean(appointmentId && row.kind === "servico" && row.id === checkout?.appointment.serviceId)}
                     className="glass-chip flex items-center gap-3 rounded-xl px-3 py-2 text-left transition-all hover:-translate-y-0.5 hover:bg-white/80"
                   >
                     <span className="min-w-0 flex-1">
@@ -290,6 +368,7 @@ export default function Pdv() {
                 <div>
                   <Label className="text-xs">Cliente</Label>
                   <Select
+                    disabled={Boolean(appointmentId)}
                     value={clientId || "none"}
                     onValueChange={(v) => setClientId(v === "none" ? "" : v)}
                   >
@@ -317,6 +396,7 @@ export default function Pdv() {
                 <div>
                   <Label className="text-xs">Barbeiro (comissão)</Label>
                   <Select
+                    disabled={Boolean(appointmentId)}
                     value={barberId || "none"}
                     onValueChange={(v) => {
                       setBarberId(v === "none" ? "" : v);
@@ -374,6 +454,7 @@ return (
                             variant="ghost"
                             size="icon-sm"
                             onClick={() => changeQty(l.key, -1)}
+                            disabled={Boolean(appointmentId && l.key === `appointment-${appointmentId}`)}
                             aria-label="Diminuir"
                           >
                             <Minus className="size-3.5" />
@@ -385,6 +466,7 @@ return (
                             variant="ghost"
                             size="icon-sm"
                             onClick={() => changeQty(l.key, 1)}
+                            disabled={Boolean(appointmentId && l.key === `appointment-${appointmentId}`)}
                             aria-label="Aumentar"
                           >
                             <Plus className="size-3.5" />
@@ -393,6 +475,7 @@ return (
                             variant="ghost"
                             size="icon-sm"
                             onClick={() => removeLine(l.key)}
+                            disabled={Boolean(appointmentId && l.key === `appointment-${appointmentId}`)}
                             aria-label="Remover"
                             className="ml-auto"
                           >
@@ -528,7 +611,7 @@ return (
 
               <Button
                 className="mt-4 w-full"
-                disabled={busy || cart.length === 0 || missingPayment || paid !== total}
+                disabled={busy || Boolean(appointmentId && (!checkout || checkout.appointment.saleId || checkout.appointment.status === "concluido")) || cart.length === 0 || missingPayment || paid !== total}
                 onClick={finalize}
               >
                 {busy ? "Registrando…" : `Finalizar venda · ${brl(total)}`}

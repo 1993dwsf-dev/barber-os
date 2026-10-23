@@ -11,7 +11,6 @@ import {
 } from "./lib";
 import { dateISO, text, timeLabel } from "./validation";
 import { timeToMin, todayISO, weekdayOf } from "../lib/dates";
-import { recordSale } from "./sales";
 
 const ACTIVE_STATUSES = ["agendado", "confirmado", "em_atendimento"] as const;
 
@@ -369,64 +368,44 @@ export const setStatus = mutation({
   },
 });
 
-/** Conclui o atendimento gerando venda real (comissão, fidelidade, estoque, caixa). */
+/**
+ * Endpoint legado: não permite mais cobrar diretamente pela Agenda.
+ * Clientes antigos recebem um erro explícito em vez de duplicar registros.
+ */
 export const complete = mutation({
   args: {
     organizationId: v.id("organizations"),
     appointmentId: v.id("appointments"),
-    payments: v.array(
-      v.object({
-        method: v.union(v.literal("dinheiro"), v.literal("debito"), v.literal("credito"), v.literal("pix")),
-        amountCents: v.number(),
-      }),
-    ),
+    payments: v.array(v.object({
+      method: v.union(v.literal("dinheiro"), v.literal("debito"), v.literal("credito"), v.literal("pix")),
+      amountCents: v.number(),
+    })),
     discountCents: v.optional(v.number()),
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { org, userId } = await requireManage(ctx, args.organizationId, "agenda");
-    const appt = await ctx.db.get(args.appointmentId);
-    if (!appt || appt.organizationId !== org._id) bad("Agendamento não encontrado.");
-    if (appt.status === "concluido") bad("Este atendimento já foi concluído.");
-    if (appt.status === "cancelado") bad("Atendimento cancelado não pode ser concluído.");
+    await requireManage(ctx, args.organizationId, "agenda");
+    const appointment = await ctx.db.get(args.appointmentId);
+    if (!appointment || appointment.organizationId !== args.organizationId)
+      bad("Agendamento não encontrado.");
+    bad("Cobrança exclusiva pelo PDV. Abra o atendimento na Agenda e finalize a venda no PDV.");
+  },
+});
 
-    const service = await ctx.db.get(appt.serviceId);
-    const client = await ctx.db.get(appt.clientId);
-
-
-    const sale = await recordSale(ctx, org, userId as Id<"users">, {
-      date: todayISO(),
-      clientId: appt.clientId,
-      barberId: appt.barberId,
-      appointmentId: appt._id,
-      discountCents: args.discountCents,
-      notes: text(args.notes, "note", "Observações") ?? appt.notes,
-      items: [
-        {
-          kind: "servico",
-          refId: appt.serviceId,
-          qty: 1,
-          unitPriceCents: appt.priceCents,
-          barberId: appt.barberId,
-        },
-      ],
-      payments: args.payments,
-    });
-
-    await ctx.db.patch(appt._id, {
-      status: "concluido",
-      paymentStatus: "pago",
-      saleId: sale.saleId,
-      updatedAt: Date.now(),
-    });
-    await audit(ctx, org._id, userId, {
-      action: "concluiu",
-      module: "Agenda",
-      recordType: "appointments",
-      recordId: appt._id,
-      summary: `Atendimento concluído: ${client?.name ?? "cliente"} / ${service?.name ?? "serviço"} — R$ ${(sale.totalCents / 100).toFixed(2)}`,
-    });
-    return sale;
+/** Dados mínimos de um agendamento para pré-preencher o PDV com vínculo verificado. */
+export const checkoutDetail = query({
+  args: { organizationId: v.id("organizations"), appointmentId: v.id("appointments") },
+  handler: async (ctx, { organizationId, appointmentId }) => {
+    await requireView(ctx, organizationId, "pos");
+    const appointment = await ctx.db.get(appointmentId);
+    if (!appointment || appointment.organizationId !== organizationId)
+      bad("Agendamento não encontrado.");
+    const [client, barber, service] = await Promise.all([
+      ctx.db.get(appointment.clientId),
+      ctx.db.get(appointment.barberId),
+      ctx.db.get(appointment.serviceId),
+    ]);
+    return { appointment, client, barber, service };
   },
 });
 
