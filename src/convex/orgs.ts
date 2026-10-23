@@ -509,8 +509,6 @@ export const recordFile = mutation({
     const { userId } = await requireManage(ctx, args.organizationId, cap);
     const name = requiredText(args.name, "name", "Nome do arquivo");
     const mimeType = args.mimeType.trim().toLowerCase();
-    if (!ALLOWED_FILE_MIME_TYPES.includes(mimeType))
-      bad("Formato não permitido. Envie imagem (JPG, PNG, WebP) ou PDF.");
     const checked = await assertUploadedFile(ctx, {
       organizationId: args.organizationId,
       storageId: args.storageId,
