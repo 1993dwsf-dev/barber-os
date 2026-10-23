@@ -47,9 +47,10 @@ Guia oficial: https://labs.convex.dev/auth/config/oauth/google
 Guia oficial: https://labs.convex.dev/auth/config/passwords
 
 
-// Atenção: não vincule a abertura comercial à mesma implantação de homologação.
-// A função de envio transacional agora segue a política de autorização do backend:
-// em homologação só o e-mail permitido; em ambiente comercial, exige sinal
-// BARBER_AUTH_COMMERCIAL_ENABLED=true E RESEND_FROM_EMAIL com domínio diferente
-// de @resend.dev. A checagem no código não comprova a verificação do DNS;
-// a confirmação deve ser feita no painel Resend e por teste de entrega real.
+## Preparação do envio comercial (não ativar na homologação)
+
+O envio transacional usa a mesma política do backend para códigos OTP, verificação de e-mail e recuperação de senha. Com `BARBER_AUTH_COMMERCIAL_ENABLED=false`, permanece a restrição ao endereço `BARBER_STAGING_EMAIL`. Com a flag comercial explicitamente ativada em **outro deployment**, o backend somente tenta enviar para novos destinatários se `RESEND_FROM_EMAIL` estiver preenchido e não utilizar remetente `@resend.dev`.
+
+A checagem de endereço **não garante** que o domínio tenha sido verificado: configurar DNS e testar entregabilidade no painel Resend é obrigatório antes de oferecer acesso a clientes. A flag comercial não deve ser ligada antes da implantação de cobrança, gestão de assinaturas, backup e revisão legal.
+
+Veja `docs/prontidao-comercial.md` para os demais bloqueadores de lançamento.
