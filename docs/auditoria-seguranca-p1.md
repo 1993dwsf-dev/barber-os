@@ -18,3 +18,9 @@ Esta alteração fortalece o backend Convex em ambiente de revisão isolado. Nen
 4. Integrar na homologação somente após todos os checks e smoke final. Não realizar deploy em Production Convex.
 
 Referências: https://docs.convex.dev/file-storage/file-metadata e https://docs.convex.dev/file-storage/overview
+
+## Cloudflare Preview: bloqueio proposital
+
+O build do Cloudflare Pages rejeita toda branch diferente de `staging`, inclusive esta branch de segurança, por `scripts/check-pages-env.mjs`. Assim, o status **Cloudflare Pages** em PRs fica vermelho por política de publicação, mesmo com CI e smoke aprovados. Não abra exceção sem provisionar backend/credenciais de preview isolados. O deploy para o endereço estável será validado *depois* de integrar na `staging`.
+
+O workflow `security-storage-smoke.yml` verifica em Convex **local e efêmero** que um PDF criado na storage conserva `contentType` e `size` e que a validação pura de anexos aceita esses metadados. Essa verificação não realiza login nem interage com dados reais.
