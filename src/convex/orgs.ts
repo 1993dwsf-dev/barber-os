@@ -11,11 +11,13 @@ import {
   requireMember,
   requireOwner,
   requireUserId,
+  requireView,
 } from "./lib";
 import { APP_ROLES, type AppRole, type Cap } from "../lib/rbac";
 import { clearRateLimit, consumeRateLimit, enforceRateLimit } from "./rateLimit";
 import { requiredText, text } from "./validation";
 import { seedDemoData } from "./seed";
+import { assertUploadedFile } from "./fileSecurity";
 
 export const DEFAULT_SERVICE_CATEGORIES = ["Cabelo", "Barba", "Combo", "Química", "Estética"];
 export const DEFAULT_PRODUCT_CATEGORIES = ["Pomadas", "Óleos", "Shampoos", "Barba", "Acessórios"];
@@ -197,7 +199,7 @@ export const getOrgContext = query({
 export const listMembers = query({
   args: { organizationId: v.id("organizations") },
   handler: async (ctx, { organizationId }) => {
-    await requireMember(ctx, organizationId);
+    await requireView(ctx, organizationId, "team");
     const members = await ctx.db
       .query("organizationMembers")
       .withIndex("by_org", (q) => q.eq("organizationId", organizationId))
@@ -330,7 +332,9 @@ export const updateOrganization = mutation({
 export const setOnboardingStep = mutation({
   args: { organizationId: v.id("organizations"), step: v.optional(v.number()) },
   handler: async (ctx, { organizationId, step }) => {
-    const { userId } = await requireMember(ctx, organizationId);
+    const { userId } = await requireOwner(ctx, organizationId);
+    if (step !== undefined && (!Number.isInteger(step) || step < 0 || step > 7))
+      bad("Etapa de configuração inválida.");
     await ctx.db.patch(organizationId, { onboardingStep: step, updatedAt: Date.now() });
     if (step === undefined) {
       await audit(ctx, organizationId, userId, {
@@ -461,24 +465,23 @@ export const joinByInviteCode = mutation({
 /* ------------------------------ arquivos ------------------------------ */
 
 export const generateUploadUrl = mutation({
-  args: { organizationId: v.id("organizations") },
-  handler: async (ctx, { organizationId }) => {
-    const { userId } = await requireMember(ctx, organizationId);
+  args: {
+    organizationId: v.id("organizations"),
+    recordType: v.optional(v.string()),
+  },
+  handler: async (ctx, { organizationId, recordType }) => {
+    // Fluxos antigos sem tipo são tratados como configuração da unidade.
+    const type = (recordType ?? "organizations").trim().toLowerCase();
+    const cap = FILE_RECORD_CAPS[type];
+    if (!cap) bad("Tipo de anexo não permitido.");
+    const { userId } = await requireManage(ctx, organizationId, cap);
     await enforceRateLimit(ctx, userId, "generateUploadUrl");
     return await ctx.storage.generateUploadUrl();
   },
 });
 
-/** Tamanho máximo de anexo (comprovantes de despesa, documentos). */
-export const MAX_FILE_BYTES = 8 * 1024 * 1024; // 8 MB
-
-/** Formatos aceitos — barra HTML/script disfarçado de anexo. */
-export const ALLOWED_FILE_MIME_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "application/pdf",
-];
+/** Limites de anexo compartilhados com a rotina de despesas. */
+export { MAX_FILE_BYTES, ALLOWED_FILE_MIME_TYPES } from "./fileSecurity";
 
 /** Módulo ao qual cada tipo de anexo pertence (define quem pode registrar). */
 const FILE_RECORD_CAPS: Record<string, Cap> = {
@@ -506,18 +509,20 @@ export const recordFile = mutation({
     const { userId } = await requireManage(ctx, args.organizationId, cap);
     const name = requiredText(args.name, "name", "Nome do arquivo");
     const mimeType = args.mimeType.trim().toLowerCase();
-    if (!ALLOWED_FILE_MIME_TYPES.includes(mimeType))
-      bad("Formato não permitido. Envie imagem (JPG, PNG, WebP) ou PDF.");
-    if (!Number.isFinite(args.size) || args.size <= 0 || args.size > MAX_FILE_BYTES)
-      bad(`O arquivo deve ter no máximo ${MAX_FILE_BYTES / 1024 / 1024} MB.`);
+    const checked = await assertUploadedFile(ctx, {
+      organizationId: args.organizationId,
+      storageId: args.storageId,
+      mimeType,
+      size: args.size,
+    });
     return await ctx.db.insert("files", {
       organizationId: args.organizationId,
       storageId: args.storageId,
       recordType,
       recordId: args.recordId,
       name,
-      mimeType,
-      size: args.size,
+      mimeType: checked.mimeType,
+      size: checked.size,
       uploadedBy: userId as Id<"users">,
       createdAt: Date.now(),
     });
@@ -537,6 +542,9 @@ export const getFileUrl = query({
       )
       .first();
     if (!file) bad("Arquivo não encontrado nesta unidade.");
+    const cap = FILE_RECORD_CAPS[file.recordType];
+    if (!cap) bad("Tipo de anexo não permitido.");
+    await requireView(ctx, organizationId, cap);
     return await ctx.storage.getUrl(storageId);
   },
 });

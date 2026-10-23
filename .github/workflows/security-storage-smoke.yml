@@ -1,0 +1,103 @@
+name: Segurança — storage Convex real (isolado)
+
+on:
+  pull_request:
+    branches: [staging]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  storage-metadata:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.3"
+      - name: Instalar dependencias
+        run: bun install --frozen-lockfile
+      - name: Testar metadados do storage em Convex local isolado
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          cat > src/convex/storageSmokeCI.ts <<'TS'
+          import { action, query } from "./_generated/server";
+          import { v } from "convex/values";
+          import { validateStoredFileMetadata } from "./fileSecurity";
+
+          // Este arquivo existe apenas durante o job. Nunca vira código da branch.
+          export const create = action({
+            args: {},
+            handler: async (ctx) => ctx.storage.store(
+              new Blob([new Uint8Array([37, 80, 68, 70, 45, 49, 46, 55])], {
+                type: "application/pdf",
+              }),
+            ),
+          });
+
+          export const inspect = query({
+            args: { storageId: v.id("_storage") },
+            handler: async (ctx, { storageId }) => {
+              const metadata = await ctx.db.system.get("_storage", storageId);
+              const checked = validateStoredFileMetadata(metadata, {
+                size: 8,
+                mimeType: "application/pdf",
+              });
+              return {
+                size: checked.size,
+                contentType: checked.mimeType,
+                storedSize: metadata?.size,
+                storedType: metadata?.contentType,
+              };
+            },
+          });
+          TS
+          bunx convex dev > /tmp/barber-convex-storage.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          ok=0
+          for i in $(seq 1 90); do
+            if [ -f .env.local ] && grep -q "Convex functions ready" /tmp/barber-convex-storage.log; then
+              ok=1
+              break
+            fi
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+              tail -n 100 /tmp/barber-convex-storage.log
+              exit 1
+            fi
+            sleep 2
+          done
+          if [ "$ok" != "1" ]; then
+            echo "Backend Convex local indisponivel"
+            tail -n 100 /tmp/barber-convex-storage.log
+            exit 1
+          fi
+          bun - <<'JS'
+          import { readFileSync } from "node:fs";
+          import { strict as assert } from "node:assert";
+          import { ConvexHttpClient } from "convex/browser";
+          import { anyApi } from "convex/server";
+
+          const env = readFileSync(".env.local", "utf8");
+          const url = env.match(/^VITE_CONVEX_URL=(.+)$/m)?.[1]?.trim();
+          assert(url?.startsWith("http://127.0.0.1:"), "Teste exige backend local");
+          const client = new ConvexHttpClient(url);
+          const storageId = await client.action(anyApi.storageSmokeCI.create, {});
+          const meta = await client.query(anyApi.storageSmokeCI.inspect, { storageId });
+          assert.deepEqual(meta, {
+            size: 8,
+            contentType: "application/pdf",
+            storedSize: 8,
+            storedType: "application/pdf",
+          });
+          console.log("PASS: Convex storage preserva MIME/tamanho e valida metadados reais");
+          JS
+      - name: Diagnostico de falha
+        if: failure()
+        run: tail -n 100 /tmp/barber-convex-storage.log || true

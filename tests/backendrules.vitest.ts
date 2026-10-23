@@ -13,6 +13,7 @@ import { beforeEach, expect, test } from "vitest";
 import { api } from "../src/convex/_generated/api";
 import type { Id } from "../src/convex/_generated/dataModel";
 import schema from "../src/convex/schema";
+import { validateStoredFileMetadata } from "../src/convex/fileSecurity";
 
 // convex-test espera os módulos globados a partir da raiz do projeto.
 const modules = import.meta.glob("../src/convex/**/*.ts");
@@ -33,11 +34,11 @@ type Owner = {
 };
 
 /** Cria owner com e-mail verificado (conta recuperável) + organização. */
-async function seedOwner(): Promise<Owner> {
+async function seedOwner(email = "owner@barbearia.test"): Promise<Owner> {
   const { userId, sessionId } = await t.run(async (ctx) => {
     const userId = await ctx.db.insert("users", {
       name: "Dona Proprietária",
-      email: "owner@barbearia.test",
+      email,
       emailVerificationTime: Date.now(),
     });
     const sessionId = await ctx.db.insert("authSessions", {
@@ -402,4 +403,150 @@ test("barbeiro só enxerga vendas vinculadas ao seu perfil", async () => {
       saleId: unassignedSale.saleId,
     }),
   ).rejects.toThrow(/não encontrada/i);
+});
+
+
+// ------------------------------ isolamento entre organizações ------------------------------
+
+test("membro de outra barbearia não consegue ler nem alterar dados da primeira", async () => {
+  const first = await seedOwner();
+  const second = await seedOwner("other-owner@barbearia.test");
+  const { clientId, serviceId } = await seedCatalog(first);
+
+  await expect(second.t2.query(api.orgs.getOrgContext, {
+    organizationId: first.orgId,
+  })).rejects.toThrow(/não tem acesso/i);
+  await expect(second.t2.query(api.orgs.listMembers, {
+    organizationId: first.orgId,
+  })).rejects.toThrow(/não tem acesso/i);
+  await expect(second.t2.mutation(api.orgs.updateOrganization, {
+    organizationId: first.orgId,
+    name: "Alteração indevida",
+  })).rejects.toThrow(/não tem acesso/i);
+  await expect(second.t2.query(api.clients.profile, {
+    organizationId: first.orgId,
+    clientId,
+  })).rejects.toThrow(/não tem acesso/i);
+
+  // Mesmo dentro de uma barbearia válida, IDs de outra não podem ser usados.
+  await expect(second.t2.query(api.clients.profile, {
+    organizationId: second.orgId,
+    clientId,
+  })).rejects.toThrow(/não encontrado/i);
+  await expect(second.t2.mutation(api.sales.createSale, {
+    organizationId: second.orgId,
+    items: [{ kind: "servico", refId: serviceId, qty: 1 }],
+    payments: [{ method: "pix", amountCents: 5000 }],
+  })).rejects.toThrow(/não encontrado/i);
+});
+
+test("somente proprietário pode avançar onboarding; papéis sem equipe não listam membros", async () => {
+  const owner = await seedOwner();
+  const barber = await seedStaff(owner, "barber");
+  const viewer = await seedStaff(owner, "viewer");
+
+  await expect(barber.t2.query(api.orgs.listMembers, {
+    organizationId: owner.orgId,
+  })).rejects.toThrow(/sem permissão/i);
+  await expect(barber.t2.mutation(api.orgs.setOnboardingStep, {
+    organizationId: owner.orgId,
+    step: 6,
+  })).rejects.toThrow(/proprietário/i);
+  await expect(viewer.t2.mutation(api.orgs.setOnboardingStep, {
+    organizationId: owner.orgId,
+  })).rejects.toThrow(/proprietário/i);
+  await expect(owner.t2.mutation(api.orgs.setOnboardingStep, {
+    organizationId: owner.orgId,
+    step: 8,
+  })).rejects.toThrow(/etapa/i);
+  const before = await t.run((ctx) => ctx.db.get(owner.orgId));
+  expect(before?.onboardingStep).toBe(1);
+  await owner.t2.mutation(api.orgs.setOnboardingStep, {
+    organizationId: owner.orgId,
+    step: 2,
+  });
+  const after = await t.run((ctx) => ctx.db.get(owner.orgId));
+  expect(after?.onboardingStep).toBe(2);
+});
+
+test("validação de metadados reais rejeita MIME, tamanho e registros inexistentes", () => {
+  const stored = { size: 8, contentType: "image/png" };
+  expect(validateStoredFileMetadata(stored, { size: 8, mimeType: "image/png" }))
+    .toEqual({ size: 8, mimeType: "image/png" });
+  expect(() => validateStoredFileMetadata(stored, { size: 999, mimeType: "image/png" }))
+    .toThrow(/metadados/i);
+  expect(() => validateStoredFileMetadata(stored, { size: 8, mimeType: "application/pdf" }))
+    .toThrow(/metadados/i);
+  expect(() => validateStoredFileMetadata({ size: 8, contentType: "text/html" }, {
+    size: 8, mimeType: "text/html",
+  })).toThrow(/formato/i);
+  expect(() => validateStoredFileMetadata({ size: MAX_SAFE_SIZE, contentType: "image/png" }, {
+    size: MAX_SAFE_SIZE, mimeType: "image/png",
+  })).toThrow(/no máximo/i);
+  expect(() => validateStoredFileMetadata(null, { size: 8, mimeType: "image/png" }))
+    .toThrow(/não encontrado/i);
+});
+const MAX_SAFE_SIZE = 9 * 1024 * 1024;
+
+test("uploads e URLs de anexos exigem autorização e isolamento da unidade", async () => {
+  const owner = await seedOwner();
+  const barber = await seedStaff(owner, "barber");
+  const other = await seedOwner("storage-owner@barbearia.test");
+  const png = new Blob([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], { type: "image/png" });
+  const storageId = await t.run((ctx) => ctx.storage.store(png));
+
+  await expect(barber.t2.mutation(api.orgs.generateUploadUrl, {
+    organizationId: owner.orgId,
+  })).rejects.toThrow(/sem permissão/i);
+  await expect(barber.t2.mutation(api.orgs.recordFile, {
+    organizationId: owner.orgId, storageId, recordType: "expenses",
+    name: "segredo.png", mimeType: "image/png", size: png.size,
+  })).rejects.toThrow(/sem permissão/i);
+
+  // O simulador de storage nesta versão não preserva MIME no system.get.
+  // Registros existentes simulados verificam a política de leitura e
+  // as proibições de reuso do ID (sem mudar o comportamento de produção).
+  await t.run((ctx) => ctx.db.insert("files", {
+    organizationId: owner.orgId,
+    storageId,
+    recordType: "expenses",
+    name: "segredo.png",
+    mimeType: "image/png",
+    size: png.size,
+    uploadedBy: owner.userId,
+    createdAt: Date.now(),
+  }));
+  await expect(owner.t2.mutation(api.orgs.recordFile, {
+    organizationId: owner.orgId, storageId, recordType: "expenses",
+    name: "segredo.png", mimeType: "image/png", size: png.size,
+  })).rejects.toThrow(/já foi registrado/i);
+  await expect(other.t2.mutation(api.orgs.recordFile, {
+    organizationId: other.orgId, storageId, recordType: "expenses",
+    name: "segredo.png", mimeType: "image/png", size: png.size,
+  })).rejects.toThrow(/outra unidade/i);
+  await expect(barber.t2.query(api.orgs.getFileUrl, {
+    organizationId: owner.orgId, storageId,
+  })).rejects.toThrow(/sem permissão/i);
+  await expect(other.t2.query(api.orgs.getFileUrl, {
+    organizationId: other.orgId, storageId,
+  })).rejects.toThrow(/arquivo não encontrado/i);
+});
+
+test("despesas rejeitam anexos com Content-Type não validado", async () => {
+  const owner = await seedOwner();
+  const pdf = new Blob([new Uint8Array([37, 80, 68, 70, 45])], { type: "application/pdf" });
+  const storageId = await t.run((ctx) => ctx.storage.store(pdf));
+
+  // Content-Type ausente no _storage do mock => sempre negar (fail closed).
+  await expect(owner.t2.mutation(api.expenses.create, {
+    organizationId: owner.orgId,
+    description: "Despesa inválida", category: "Outros",
+    amountCents: 500, method: "pix",
+    fileStorageId: storageId, fileName: "comprovante.pdf",
+    fileMimeType: "application/pdf", fileSize: pdf.size,
+  })).rejects.toThrow(/formato real/i);
+  const expenses = await t.run((ctx) =>
+    ctx.db.query("expenses").withIndex("by_org_date", q => q.eq("organizationId", owner.orgId)).collect(),
+  );
+  expect(expenses).toHaveLength(0);
 });

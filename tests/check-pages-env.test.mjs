@@ -31,3 +31,11 @@ test("não aceita build de main nem publicação sem flag de homologação", () 
   expect(checkPagesEnv({ ...valid, CF_PAGES_BRANCH: "main" })).not.toEqual([]);
   expect(checkPagesEnv({ ...valid, VITE_STAGING_ONLY: "" })).not.toEqual([]);
 });
+
+test("PR de segurança não deve ser publicado como preview do Cloudflare Pages", () => {
+  const result = checkPagesEnv({
+    ...valid,
+    CF_PAGES_BRANCH: "security/p1-tenancy-rbac-uploads",
+  });
+  expect(result.some((item) => item.includes('Branch de publicação incorreta'))).toBe(true);
+});
