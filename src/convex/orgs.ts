@@ -17,7 +17,7 @@ import { APP_ROLES, type AppRole, type Cap } from "../lib/rbac";
 import { clearRateLimit, consumeRateLimit, enforceRateLimit } from "./rateLimit";
 import { requiredText, text } from "./validation";
 import { seedDemoData } from "./seed";
-import { assertUploadedFile, ALLOWED_FILE_MIME_TYPES, MAX_FILE_BYTES } from "./fileSecurity";
+import { assertUploadedFile } from "./fileSecurity";
 
 export const DEFAULT_SERVICE_CATEGORIES = ["Cabelo", "Barba", "Combo", "Química", "Estética"];
 export const DEFAULT_PRODUCT_CATEGORIES = ["Pomadas", "Óleos", "Shampoos", "Barba", "Acessórios"];
