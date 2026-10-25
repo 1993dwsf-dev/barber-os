@@ -332,83 +332,114 @@ test("caixa rejeita valores fracionários em centavos na abertura, movimentos e 
   });
 });
 
-test("barbeiro consulta o PDV e operador de caixa acessa PDV e caixa", async () => {
+test("barbeiro não acessa o PDV geral; caixa mantém acesso normal", async () => {
   const owner = await seedOwner();
   const barber = await seedStaff(owner, "barber");
   const cashier = await seedStaff(owner, "cashier");
-
-  const sales = await barber.t2.query(api.sales.listSales, {
+  await expect(barber.t2.query(api.sales.listSales, {
     organizationId: owner.orgId,
-  });
-  expect(sales).toBeDefined();
-
-  const cashierSales = await cashier.t2.query(api.sales.listSales, {
+  })).rejects.toThrow(/sem permissão/i);
+  expect(await cashier.t2.query(api.sales.listSales, {
     organizationId: owner.orgId,
-  });
-  expect(cashierSales).toBeDefined();
-
-  const cashierSession = await cashier.t2.query(api.cash.currentSession, {
+  })).toBeDefined();
+  expect(await cashier.t2.query(api.cash.currentSession, {
     organizationId: owner.orgId,
-  });
-  expect(cashierSession).toBeNull();
+  })).toBeNull();
 });
-test("barbeiro só enxerga vendas vinculadas ao seu perfil", async () => {
-  const owner = await seedOwner();
-  const { serviceId, barberId } = await seedCatalog(owner);
-  const staff = await seedStaff(owner, "barber");
 
-  const assignedSale = await owner.t2.mutation(api.sales.createSale, {
-    organizationId: owner.orgId,
-    barberId,
-    items: [{ kind: "servico", refId: serviceId, qty: 1, barberId }],
-    payments: [{ method: "pix", amountCents: 5000 }],
+test("dois barbeiros com convite veem só os próprios atendimentos e comissões", async () => {
+  const owner = await seedOwner("barber-privacy-owner@barbearia.test");
+  const { serviceId, barberId, clientId } = await seedCatalog(owner);
+  const secondBarberId = await owner.t2.mutation(api.barbers.create, {
+    organizationId: owner.orgId, name: "Profissional Dois",
   });
-  const unassignedSale = await owner.t2.mutation(api.sales.createSale, {
+  const first = await seedStaff(owner, "barber");
+  const second = await seedStaff(owner, "barber");
+  const day = new Date().toISOString().slice(0, 10);
+
+  const ownAppointment = await owner.t2.mutation(api.appointments.create, {
+    organizationId: owner.orgId, clientId, barberId, serviceId,
+    date: day, startTime: "09:00", ignoreHours: true,
+  });
+  const secondAppointment = await owner.t2.mutation(api.appointments.create, {
+    organizationId: owner.orgId, clientId, barberId: secondBarberId, serviceId,
+    date: day, startTime: "10:00", ignoreHours: true,
+  });
+  for (const id of [barberId, secondBarberId]) {
+    await owner.t2.mutation(api.sales.createSale, {
+      organizationId: owner.orgId, clientId, barberId: id,
+      items: [{ kind: "servico", refId: serviceId, barberId: id, qty: 1 }],
+      payments: [{ method: "pix", amountCents: 5000 }],
+    });
+  }
+
+  const noLink = await first.t2.query(api.barberPortal.myWorkspace, {
+    organizationId: owner.orgId,
+  });
+  expect(noLink.linked).toBe(false);
+  expect(noLink.appointments).toEqual([]);
+  expect(noLink.commissions).toEqual([]);
+
+  await t.run(async ctx => {
+    for (const [user, profileId] of [[first.userId, barberId], [second.userId, secondBarberId]] as const) {
+      const member = await ctx.db.query("organizationMembers")
+        .withIndex("by_org_user", q =>
+          q.eq("organizationId", owner.orgId).eq("userId", user),
+        ).unique();
+      await ctx.db.patch(member!._id, { barberId: profileId });
+    }
+  });
+  const mine = await first.t2.query(api.barberPortal.myWorkspace, {
+    organizationId: owner.orgId,
+  });
+  const theirs = await second.t2.query(api.barberPortal.myWorkspace, {
+    organizationId: owner.orgId,
+  });
+  expect(mine.linked).toBe(true);
+  expect(mine.appointments.map(a => a.id)).toEqual([ownAppointment]);
+  expect(theirs.appointments.map(a => a.id)).toEqual([secondAppointment]);
+  expect(mine.totals.totalCents).toBeGreaterThan(0);
+  expect(theirs.totals.totalCents).toBeGreaterThan(0);
+
+  await expect(first.t2.query(api.appointments.agenda, {
+    organizationId: owner.orgId, from: day, to: day,
+  })).rejects.toThrow(/sem permissão/i);
+  await expect(first.t2.query(api.clients.list, {
+    organizationId: owner.orgId,
+  })).rejects.toThrow(/sem permissão/i);
+  await expect(first.t2.query(api.commissions.list, {
+    organizationId: owner.orgId,
+  })).rejects.toThrow(/sem permissão/i);
+  await expect(first.t2.query(api.barbers.performance, {
+    organizationId: owner.orgId, from: day, to: day,
+  })).rejects.toThrow(/sem permissão/i);
+  await expect(first.t2.mutation(api.sales.createSale, {
     organizationId: owner.orgId,
     items: [{ kind: "servico", refId: serviceId, qty: 1 }],
     payments: [{ method: "pix", amountCents: 5000 }],
+  })).rejects.toThrow(/sem permissão/i);
+  await expect(first.t2.mutation(api.barberPortal.updateMyAppointment, {
+    organizationId: owner.orgId, appointmentId: secondAppointment,
+    status: "confirmado",
+  })).rejects.toThrow(/não encontrado para seu perfil/i);
+
+  await first.t2.mutation(api.barberPortal.updateMyAppointment, {
+    organizationId: owner.orgId, appointmentId: ownAppointment, status: "confirmado",
   });
-
-  expect(
-    await staff.t2.query(api.sales.listSales, { organizationId: owner.orgId }),
-  ).toEqual([]);
-  await expect(
-    staff.t2.query(api.sales.saleDetail, {
-      organizationId: owner.orgId,
-      saleId: assignedSale.saleId,
-    }),
-  ).rejects.toThrow(/não encontrada/i);
-
-  await t.run(async (ctx) => {
-    const member = await ctx.db
-      .query("organizationMembers")
-      .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", owner.orgId).eq("userId", staff.userId),
-      )
-      .first();
-    await ctx.db.patch(member!._id, { barberId });
+  await first.t2.mutation(api.barberPortal.updateMyAppointment, {
+    organizationId: owner.orgId, appointmentId: ownAppointment, status: "em_atendimento",
   });
-
-  const visible = await staff.t2.query(api.sales.listSales, {
+  await expect(first.t2.mutation(api.barberPortal.updateMyAppointment, {
+    organizationId: owner.orgId, appointmentId: ownAppointment, status: "confirmado",
+  })).rejects.toThrow(/não permitida/i);
+  const visibleOrg = (await first.t2.query(api.orgs.myOrganizations, {}))[0].org;
+  expect(visibleOrg.inviteCode).toBe("");
+  expect(visibleOrg.phone).toBeUndefined();
+  expect(visibleOrg.settings.productCategories).toEqual([]);
+  await expect(owner.t2.query(api.barberPortal.myWorkspace, {
     organizationId: owner.orgId,
-  });
-  expect(visible.map((sale) => sale._id)).toEqual([assignedSale.saleId]);
-  const detail = await staff.t2.query(api.sales.saleDetail, {
-    organizationId: owner.orgId,
-    saleId: assignedSale.saleId,
-  });
-  expect(detail.sale._id).toBe(assignedSale.saleId);
-
-  await expect(
-    staff.t2.query(api.sales.saleDetail, {
-      organizationId: owner.orgId,
-      saleId: unassignedSale.saleId,
-    }),
-  ).rejects.toThrow(/não encontrada/i);
+  })).rejects.toThrow(/exclusiva do perfil Barbeiro/i);
 });
-
-
-// ------------------------------ isolamento entre organizações ------------------------------
 
 test("membro de outra barbearia não consegue ler nem alterar dados da primeira", async () => {
   const first = await seedOwner();
