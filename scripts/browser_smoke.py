@@ -8,6 +8,7 @@ import re
 import sys
 import traceback
 from playwright.sync_api import expect, sync_playwright
+from barber_invites_smoke import run_barber_invites
 
 BASE = os.getenv("SMOKE_BASE_URL", "http://127.0.0.1:5173").rstrip("/")
 EVIDENCE = pathlib.Path("artifacts/browser-smoke")
@@ -139,7 +140,9 @@ def run():
             email_page.wait_for_url(re.compile(r"/app/configuracoes(?:[?#].*)?$"), timeout=45000)
             expect(email_page.get_by_role("heading", name="Configurações").first).to_be_visible(timeout=30000)
             shot(email_page, "10-barbearia-criada")
-            print("BROWSER_SMOKE_PASS - visitante, demo, agenda, venda PIX, caixa, mobile, OTP simulado e cadastro")
+            stage = "convites-isolados"
+            run_barber_invites(browser, email_page, BASE)
+            print("BROWSER_SMOKE_PASS - visitante, demo, agenda, venda PIX, caixa, mobile, OTP simulado, cadastro e convites isolados")
             if errors:
                 print("Exceções Javascript:", *errors[:8], sep="\n - ")
         except Exception:
