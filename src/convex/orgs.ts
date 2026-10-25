@@ -439,7 +439,7 @@ export const updateMemberDisplayName = mutation({
     const member = await ctx.db.get(memberId);
     if (!member || member.organizationId !== organizationId) bad("Membro não encontrado.");
     const normalized = requiredText(displayName, "name", "Nome de exibição")
-      .replace(/\\s+/g, " ");
+      .replace(/\s+/g, " ");
     if (normalized.length < 2) bad("O nome de exibição deve ter pelo menos 2 caracteres.");
     await ctx.db.patch(memberId, { displayName: normalized });
     await audit(ctx, organizationId, userId, {
