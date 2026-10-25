@@ -30,15 +30,22 @@ O comando **Configurações → Backup → Exportar dados (JSON)** grava dados e
 
 O conteúdo acima é **ilustrativo**, não é um backup restaurável. IDs, campos e valores mudam conforme o schema. Anexos no storage não são incorporados como bytes neste JSON, apenas metadados/referências. A exportação pode ser parcial; verificar `truncated` e `counts`.
 
-### Como visualizar o arquivo baixado
+### Como visualizar o backup JSON
 
-1. Abra com **VS Code**, **Notepad++** ou outro editor de texto (ideal para conferir estrutura e registros).
-2. Para ver **tabelas no Excel**, selecione **Dados → Obter Dados → De Arquivo → De JSON** (Power Query, quando disponível), escolha `data`, selecione a tabela de interesse (por exemplo `clients`) e expanda registros para colunas. Pode exigir transformação manual.
-3. Não cole nem envie o arquivo a conversores JSON online desconhecidos: ele pode conter telefones, e-mails, dados financeiros e histórico de clientes.
+O arquivo com extensão `.json` é um **documento de dados estruturados**, não uma planilha pronta. Você pode conferir o conteúdo sem instalar um programa específico do Barber OS:
 
-### E se precisar colocar os dados de volta?
+1. **Visualização rápida no computador:** abra o arquivo baixado no **VS Code**, **Notepad++** ou outro editor que suporte JSON. Localize as chaves `organization`, `counts`, `truncated` e `data`. Em `data`, ficam listas como `clients` (clientes), `appointments` (agendamentos), `sales` (vendas) e `products` (produtos).
+2. **Visualização em colunas no Microsoft Excel:** nas versões que possuem **Power Query**, vá a **Dados → Obter Dados → De Arquivo → De JSON**. Escolha o arquivo e, no editor, navegue até `data`, selecione a lista desejada (por exemplo, `clients`), converta em tabela e expanda os registros em colunas. Clique em **Fechar e Carregar**. A sequência exata de menus varia conforme a versão do Excel.
+3. **Planilhas alternativas:** LibreOffice Calc e aplicativos similares geralmente trabalham melhor com CSV. É possível converter localmente **cada tabela** do JSON para CSV, sem enviar a terceiros, somente para análise; essa conversão não serve para restauração do banco.
+4. **Antes de confiar na cópia:** confira `counts` (quantos registros foram exportados por tabela) e `truncated` (tabelas cortadas). **Se `truncated` não estiver vazio, a exportação é parcial.** A ausência dessa sinalização também não garante que anexos e todos os recursos do Convex foram copiados.
 
-**Hoje NÃO há função de restauração por upload de JSON.** O botão atual faz apenas exportação. Não ofereça esse arquivo como garantia de recuperação integral da barbearia.
+**Segurança:** o JSON pode conter telefones, nomes, e-mails, atendimentos, valores financeiros e informações de funcionários. Armazene em local protegido, restrinja acesso, não publique no GitHub, não compartilhe por links abertos e não use conversores JSON online desconhecidos.
+
+### Como restaurar os dados no futuro?
+
+**Situação atual:** o Barber OS **NÃO possui** botão de importar ou restaurar o JSON baixado. A exportação é unidirecional. Não existe fluxo homologado para reenviar esse arquivo ao sistema, e não há garantia de recuperação integral da barbearia somente com ele.
+
+Se ocorrer um problema agora, **não tente reimportar o JSON diretamente pelo painel do Convex**: o arquivo inclui referências entre tabelas que precisam ser reconciliadas e pode estar incompleto. Uma recuperação real dependerá dos recursos de backup/snapshot efetivamente habilitados e disponíveis no Convex e de um procedimento de suporte que ainda precisa ser projetado e testado.
 
 Para suportar restauração no futuro, será necessário desenvolver, **em ambiente de QA isolado e antes da operação comercial**, um procedimento que:
 - Verifique origem, versão do schema, integridade do arquivo e tabelas truncadas.
@@ -49,6 +56,20 @@ Para suportar restauração no futuro, será necessário desenvolver, **em ambie
 - Considere backups e snapshots **gerenciados pelo Convex** além do JSON; documente e valide recuperação antes de aceitar dados reais.
 
 **Não** importar o conteúdo manualmente em tabelas do Convex em produção nem convertê-lo em CSV e reimportar como se fosse backup; isso perderia referências e consistência financeira.
+
+#### Critérios para uma restauração confiável
+
+Antes de disponibilizar **Restaurar backup** no Barber OS, a funcionalidade precisará ser validada com dados fictícios e cumprir todos estes pontos:
+
+- Identificar o arquivo, a organização de destino e sua versão; rejeitar conteúdo malformado, truncado ou de outra organização.
+- Apresentar uma prévia antes da operação, detalhando quantidades, conflitos e consequências.
+- Preservar relacionamentos de clientes, atendimentos, vendas, pagamentos, estoque, caixa, comissões e usuários.
+- Recuperar anexos pelo mecanismo adequado e tratar arquivos ausentes.
+- Impedir duplicação de transações financeiras e garantir rastreabilidade e possibilidade de reversão.
+- Testar restauração de ponta a ponta em **ambiente isolado**, sem sobrescrever dados operacionais.
+- Definir e testar uma estratégia de **backup real com o provedor**, separada da exportação JSON.
+
+A implantação e o teste desta função estão registrados na [Issue #26 — Recuperação segura de backups](https://github.com/1993dwsf-dev/barber-os/issues/26). Até sua conclusão, não apresente o JSON como backup restaurável.
 
 ### Escopo
 
