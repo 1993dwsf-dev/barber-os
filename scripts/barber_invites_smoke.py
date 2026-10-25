@@ -67,8 +67,38 @@ def _link_barber(owner, base, email, professional):
     expect(member).to_have_count(1, timeout=30000)
     member.get_by_role("combobox").last.click()
     owner.get_by_role("option", name=professional, exact=True).click()
-    expect(owner.get_by_text("Vínculo criado")).to_be_visible(timeout=35000)
+    expect(owner.get_by_text("Vínculo atualizado")).to_be_visible(timeout=35000)
     expect(member.get_by_text("vinculado a " + professional, exact=False)).to_be_visible(timeout=30000)
+
+
+def _test_team_member_editing(owner, base):
+    """Exercita o novo editor de nomes e os vínculos modificáveis na própria UI."""
+    owner.goto(base + "/app/configuracoes", wait_until="domcontentloaded")
+    owner.get_by_role("tab", name="Equipe").click()
+    myself = owner.locator("li").filter(has_text="qa-barber-browser@example.test")
+    expect(myself).to_have_count(1, timeout=30000)
+    myself.get_by_role("button", name=re.compile(r"Editar nome")).click()
+    dialog = owner.get_by_role("dialog")
+    expect(dialog.get_by_role("heading", name="Editar nome na equipe")).to_be_visible()
+    dialog.locator("#team-display-name").fill("Titular QA da Equipe")
+    dialog.get_by_role("button", name="Salvar nome").click()
+    expect(myself.get_by_text("Titular QA da Equipe")).to_be_visible(timeout=30000)
+    expect(myself.get_by_text("qa-barber-browser@example.test")).to_be_visible()
+    expect(myself.get_by_role("combobox").first).to_be_disabled()
+    print("PASS: proprietário altera nome de exibição e mantém papel e e-mail", flush=True)
+
+    member = owner.locator("li").filter(has_text="barbeiro-e2e-a@example.test")
+    expect(member).to_have_count(1, timeout=30000)
+    member.get_by_role("combobox").last.click()
+    owner.get_by_role("option", name="Sem vínculo", exact=True).click()
+    expect(owner.get_by_text("Vínculo removido")).to_be_visible(timeout=30000)
+    expect(member.get_by_text("vinculado a Profissional A Teste")).to_have_count(0)
+    member.get_by_role("combobox").last.click()
+    owner.get_by_role("option", name="Profissional A Teste", exact=True).click()
+    expect(owner.get_by_text("Vínculo atualizado")).to_be_visible(timeout=30000)
+    expect(member.get_by_text("vinculado a Profissional A Teste", exact=False)).to_be_visible(timeout=30000)
+    owner.screenshot(path="artifacts/browser-smoke/11-equipe-editada.png", full_page=True)
+    print("PASS: vínculo profissional removido e restaurado na UI", flush=True)
 
 
 def run_barber_invites(browser, owner, base):
@@ -100,6 +130,9 @@ def run_barber_invites(browser, owner, base):
         _create_barber(owner, base, "Profissional B Teste")
         _link_barber(owner, base, "barbeiro-e2e-a@example.test", "Profissional A Teste")
         _link_barber(owner, base, "barbeiro-e2e-b@example.test", "Profissional B Teste")
+
+        stage = "editar-equipe"
+        _test_team_member_editing(owner, base)
 
         stage = "area-privada"
         for page, mine, colleague in (
