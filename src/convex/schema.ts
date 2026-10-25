@@ -119,6 +119,7 @@ const schema = defineSchema(
       organizationId: v.id("organizations"),
       userId: v.id("users"),
       role: roleValidator,
+      displayName: v.optional(v.string()), // nome visível apenas nesta unidade
       barberId: v.optional(v.id("barbers")), // vinculação com perfil de barbeiro
       createdAt: v.number(),
     })
