@@ -24,8 +24,10 @@ describe("RBAC", () => {
     expect(canManage("barber", "cash")).toBe(false);
     expect(canManage("barber", "expenses")).toBe(false);
     expect(canManage("barber", "commissions")).toBe(false);
-    expect(canManage("barber", "agenda")).toBe(true);
-    expect(canManage("barber", "clients")).toBe(true);
+    expect(canManage("barber", "agenda")).toBe(false);
+    expect(canManage("barber", "clients")).toBe(false);
+    expect(canView("barber", "barberPortal")).toBe(true);
+    expect(RBAC.barber.manage).toHaveLength(0);
   });
 
   test("visitante nunca escreve", () => {
@@ -45,7 +47,9 @@ describe("RBAC", () => {
         expect(canView(role, capability)).toBe(true);
       }
     }
-    expect(canView("barber", "pos")).toBe(true);
+    expect(canView("barber", "pos")).toBe(false);
+    expect(canView("barber", "agenda")).toBe(false);
+    expect(canView("barber", "clients")).toBe(false);
     expect(canView("cashier", "pos")).toBe(true);
     expect(canView("cashier", "cash")).toBe(true);
     expect(canView("cashier", "crm")).toBe(true);

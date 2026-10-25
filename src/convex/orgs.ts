@@ -194,6 +194,23 @@ export const issuePilotInvite = internalMutation({
   },
 });
 
+/** Oculta o convite de ingresso e dados de gestão das sessões de barbeiro. */
+function redactForBarber(org: Doc<"organizations">): Doc<"organizations"> {
+  return {
+    ...org,
+    inviteCode: "",
+    phone: undefined,
+    email: undefined,
+    address: undefined,
+    businessHours: [],
+    settings: {
+      ...org.settings,
+      serviceCategories: [], productCategories: [], expenseCategories: [],
+      cancellationPolicy: "", noShowPolicy: "",
+    },
+  };
+}
+
 /* ------------------------------ queries ------------------------------ */
 
 export const myOrganizations = query({
@@ -208,7 +225,7 @@ export const myOrganizations = query({
     const out: Array<{ org: Doc<"organizations">; role: AppRole; memberId: Id<"organizationMembers"> }> = [];
     for (const m of memberships) {
       const org = await ctx.db.get(m.organizationId);
-      if (org) out.push({ org, role: m.role, memberId: m._id });
+      if (org) out.push({ org: m.role === "barber" ? redactForBarber(org) : org, role: m.role, memberId: m._id });
     }
     return out;
   },
@@ -226,7 +243,7 @@ export const getOrgContext = query({
   args: { organizationId: v.id("organizations") },
   handler: async (ctx, { organizationId }) => {
     const { member, org } = await requireMember(ctx, organizationId);
-    return { org, member };
+    return { org: member.role === "barber" ? redactForBarber(org) : org, member };
   },
 });
 

@@ -18,6 +18,7 @@ export const ROLE_LABELS: Record<AppRole, string> = {
 
 /** Módulos/capacidades do sistema. */
 export const CAPS = [
+  "barberPortal",
   "dashboard",
   "agenda",
   "clients",
@@ -49,19 +50,8 @@ export const RBAC: Matrix = {
     view: ALL,
     manage: ALL.filter((c) => c !== "settings" && c !== "demo" && c !== "team"),
   },
-  barber: {
-    view: [
-      "dashboard",
-      "agenda",
-      "clients",
-      "catalog",
-      "products",
-      "pos",
-      "loyalty",
-      "crm",
-    ],
-    manage: ["agenda", "clients", "pos", "crm"],
-  },
+  // Isolamento: funcionários veem apenas consultas dedicadas ao seu barberId.
+  barber: { view: ["barberPortal"], manage: [] },
   cashier: {
     view: [
       "dashboard",

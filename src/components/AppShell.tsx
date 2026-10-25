@@ -444,8 +444,38 @@ function OrgSwitcher() {
   );
 }
 
+function BarberShell({ children }: { children: ReactNode }) {
+  const { org } = useOrg();
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      <header className="sticky top-0 z-20 border-b border-border/60 bg-background/95 px-4 py-3 backdrop-blur">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
+          <Link to="/app/meu-espaco" className="flex items-center gap-2 text-sm font-semibold">
+            <Scissors className="size-5 text-primary" /> Barber OS
+            <span className="hidden font-normal text-muted-foreground sm:inline">· Meu espaço</span>
+          </Link>
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="hidden max-w-32 truncate text-xs text-muted-foreground sm:block">
+              {user?.name ?? org?.name ?? "Barbeiro"}
+            </span>
+            <Button size="sm" variant="outline" onClick={() => {
+              navigate("/");
+              void signOut().catch(() => {});
+            }}>
+              <LogOut className="size-4" /> Sair
+            </Button>
+          </div>
+        </div>
+      </header>
+      <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:py-8">{children}</main>
+    </div>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
-  const { loading, org, can, canEdit } = useOrg();
+  const { loading, org, can, canEdit, role } = useOrg();
   const { user } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const mainRef = useRef<HTMLElement | null>(null);
@@ -484,6 +514,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
     );
   }
+
+  if (role === "barber") return <BarberShell>{children}</BarberShell>;
 
   return (
     <div className="flex min-h-screen">
