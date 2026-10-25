@@ -217,9 +217,25 @@ export const linkToMember = mutation({
     barberId: v.optional(v.id("barbers")),
   },
   handler: async (ctx, args) => {
-    const { org } = await requireManage(ctx, args.organizationId, "team");
+    const { org, userId } = await requireManage(ctx, args.organizationId, "team");
     const member = await requireSameOrg(await ctx.db.get(args.memberId), org._id, "Membro");
-    if (args.barberId) await requireSameOrg(await ctx.db.get(args.barberId), org._id, "Barbeiro");
+    if (args.barberId) {
+      await requireSameOrg(await ctx.db.get(args.barberId), org._id, "Barbeiro");
+      // Uma conta vinculada a um perfil profissional recebe acesso à agenda e
+      // às comissões dele. Não permitir que duas contas compartilhem esse acesso.
+      const members = await ctx.db.query("organizationMembers")
+        .withIndex("by_org", q => q.eq("organizationId", org._id))
+        .collect();
+      if (members.some(m => m._id !== member._id && m.barberId === args.barberId)) {
+        bad("Este barbeiro já está vinculado a outra conta da equipe.");
+      }
+    }
+    if (member.barberId === args.barberId) return;
     await ctx.db.patch(member._id, { barberId: args.barberId });
+    await audit(ctx, org._id, userId, {
+      action: "atualizou", module: "Equipe", recordType: "organizationMembers",
+      recordId: member._id,
+      summary: args.barberId ? "Vínculo profissional atualizado" : "Vínculo profissional removido",
+    });
   },
 });

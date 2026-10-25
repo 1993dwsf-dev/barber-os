@@ -263,7 +263,7 @@ export const listMembers = query({
         role: m.role,
         barberId: m.barberId,
         userId: m.userId,
-        name: user?.name ?? "(sem nome)",
+        name: m.displayName ?? user?.name ?? "(sem nome)",
         email: user?.email ?? "",
       });
     }
@@ -425,6 +425,31 @@ export const setOnboardingStep = mutation({
 });
 
 /* ------------------------------ membros ------------------------------ */
+
+/** Permite que o proprietário ajuste o nome mostrado nesta unidade, sem
+ * sobrescrever o nome global da conta nem as credenciais de login. */
+export const updateMemberDisplayName = mutation({
+  args: {
+    organizationId: v.id("organizations"),
+    memberId: v.id("organizationMembers"),
+    displayName: v.string(),
+  },
+  handler: async (ctx, { organizationId, memberId, displayName }) => {
+    const { userId } = await requireOwner(ctx, organizationId);
+    const member = await ctx.db.get(memberId);
+    if (!member || member.organizationId !== organizationId) bad("Membro não encontrado.");
+    const normalized = requiredText(displayName, "name", "Nome de exibição")
+      .replace(/\s+/g, " ");
+    if (normalized.length < 2) bad("O nome de exibição deve ter pelo menos 2 caracteres.");
+    await ctx.db.patch(memberId, { displayName: normalized });
+    await audit(ctx, organizationId, userId, {
+      action: "atualizou", module: "Equipe",
+      recordType: "organizationMembers", recordId: memberId,
+      summary: "Nome de exibição do membro atualizado",
+    });
+    return normalized;
+  },
+});
 
 export const updateMemberRole = mutation({
   args: { organizationId: v.id("organizations"), memberId: v.id("organizationMembers"), role: roleValidator },
