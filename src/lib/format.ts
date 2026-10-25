@@ -119,7 +119,7 @@ export const APPOINTMENT_STATUS_TONES: Record<string, string> = {
 export function toCSV(headers: string[], rows: (string | number)[][]): string {
   const esc = (value: string | number) => {
     const original = String(value ?? "");
-    const first = original.replace(/^[\s\u0000-\u001F\u200B\uFEFF]+/gu, "");
+    const first = original.replace(/^[\s\p{Cc}\u200B\uFEFF]+/gu, "");
     const plainNumber = /^[+-]?\d+(?:[.,]\d+)?$/.test(first);
     // Excel pode interpretar valores vindos de cadastros como fórmulas.
     // Preservamos números monetários negativos legítimos para permitir somas.
@@ -133,7 +133,7 @@ export function toCSV(headers: string[], rows: (string | number)[][]): string {
 
 export function downloadCSV(filename: string, csv: string): void {
   // A extensão é sempre .csv, independentemente da origem do relatório.
-  const safeBase = filename.replace(/[\\/:*?"<>|\u0000-\u001F]/g, "_").replace(/\.csv$/i, "");
+  const safeBase = filename.replace(/[\\/:*?"<>|\p{Cc}]/gu, "_").replace(/\.csv$/i, "");
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
