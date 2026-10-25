@@ -8,6 +8,7 @@ import {
   History,
   PackagePlus,
   Plus,
+  Tags,
   Search,
   TrendingUp,
   Truck,
@@ -56,6 +57,7 @@ export default function Produtos() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [open, setOpen] = useState(false);
+  const [categoryOpen, setCategoryOpen] = useState(false);
   const [editing, setEditing] = useState<Id<"products"> | null>(null);
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [movementOpen, setMovementOpen] = useState(false);
@@ -73,7 +75,10 @@ export default function Produtos() {
 
   if (!orgId) return <Loading />;
 
-  const categories = [...new Set((products ?? []).map((p) => p.category))];
+  const categories = [...new Set([
+    ...(org?.settings.productCategories ?? []),
+    ...(products ?? []).map(p => p.category),
+  ])].sort((a, b) => a.localeCompare(b, "pt-BR"));
   const list = (products ?? []).filter((p) => {
     if (category !== "all" && p.category !== category) return false;
     if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false;
@@ -92,6 +97,9 @@ export default function Produtos() {
         actions={
           canEdit("products") ? (
             <>
+              <Button variant="outline" className="bg-white/60" onClick={() => setCategoryOpen(true)}>
+                <Tags className="size-4" /> Nova categoria
+              </Button>
               <Button variant="outline" className="bg-white/60" onClick={() => setSupplierOpen(true)}>
                 <Truck className="size-4" /> Fornecedor
               </Button>
@@ -334,10 +342,19 @@ export default function Produtos() {
         open={open}
         onOpenChange={setOpen}
         productId={editing}
-        categories={org?.settings.productCategories ?? []}
+        categories={categories}
         onSaved={() => {
           setOpen(false);
           toast.success("Produto salvo");
+        }}
+      />
+      <CategoryDialog
+        open={categoryOpen}
+        onOpenChange={setCategoryOpen}
+        onCreated={(name) => {
+          setCategoryOpen(false);
+          setCategory(name);
+          toast.success(`Categoria "${name}" criada`);
         }}
       />
       <SupplierDialog
@@ -365,6 +382,67 @@ export default function Produtos() {
   );
 }
 
+function CategoryDialog({
+  open,
+  onOpenChange,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onCreated: (name: string) => void;
+}) {
+  const { orgId } = useOrg();
+  const createCategory = useMutation(api.products.createCategory);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    if (!orgId || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const created = await createCategory({ organizationId: orgId, name });
+      setName("");
+      onCreated(created);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível cadastrar a categoria.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="glass-strong">
+        <DialogHeader>
+          <DialogTitle>Nova categoria de produto</DialogTitle>
+          <DialogDescription>
+            Exemplos: Bebidas, Bonés, Roupas, Cosméticos ou outros itens vendidos no PDV.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2">
+          <Label className="text-xs">Nome da categoria</Label>
+          <Input
+            className="glass-input"
+            maxLength={60}
+            placeholder="Ex.: Bebidas"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); void save(); } }}
+          />
+          {error ? <p className="text-xs text-rose-600">{error}</p> : null}
+        </div>
+        <DialogFooter>
+          <Button disabled={busy || name.trim().length < 2} onClick={save}>
+            {busy ? "Salvando…" : "Cadastrar categoria"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ProductDialog({
   open,
   onOpenChange,
@@ -386,6 +464,10 @@ function ProductDialog({
   const suppliers = useQuery(api.products.listSuppliers, orgId ? { organizationId: orgId } : "skip");
   const create = useMutation(api.products.create);
   const update = useMutation(api.products.update);
+  const createCategory = useMutation(api.products.createCategory);
+  const [customCategory, setCustomCategory] = useState("");
+  const [showNewCategory, setShowNewCategory] = useState(false);
+  const [savingCategory, setSavingCategory] = useState(false);
   const current = (products ?? []).find((p) => p._id === productId);
 
   const [name, setName] = useState("");
@@ -496,6 +578,48 @@ function ProductDialog({
                   ))}
                 </SelectContent>
               </Select>
+              <Button
+                type="button" variant="link" size="sm"
+                className="mt-1 h-auto px-0 text-xs"
+                onClick={() => setShowNewCategory(v => !v)}
+              >
+                <Plus className="size-3" /> Criar categoria
+              </Button>
+              {showNewCategory ? (
+                <div className="mt-1 flex items-center gap-2">
+                  <Input
+                    className="glass-input"
+                    maxLength={60}
+                    placeholder="Ex.: Bonés"
+                    value={customCategory}
+                    onChange={e => setCustomCategory(e.target.value)}
+                  />
+                  <Button
+                    type="button" size="sm"
+                    disabled={savingCategory || customCategory.trim().length < 2}
+                    onClick={async () => {
+                      if (!orgId) return;
+                      setSavingCategory(true);
+                      setError(null);
+                      try {
+                        const created = await createCategory({
+                          organizationId: orgId, name: customCategory,
+                        });
+                        setCategory(created);
+                        setCustomCategory("");
+                        setShowNewCategory(false);
+                        toast.success("Categoria cadastrada");
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : "Falha ao cadastrar categoria.");
+                      } finally {
+                        setSavingCategory(false);
+                      }
+                    }}
+                  >
+                    Adicionar
+                  </Button>
+                </div>
+              ) : null}
             </div>
             <div>
               <Label className="text-xs">Fornecedor</Label>
