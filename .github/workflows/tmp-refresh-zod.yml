@@ -1,0 +1,33 @@
+name: Temp — atualizar Zod com lockfile seguro
+
+on:
+  push:
+    branches: [fix/custom-product-categories]
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-zod:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/custom-product-categories
+          persist-credentials: true
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+      - name: Atualizar Zod vulnerável e regerar lockfile
+        run: |
+          bun add 'zod@^4.6.6'
+          bun audit
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet -- package.json bun.lock; then
+            git add package.json bun.lock
+            git commit -m "fix(deps): update zod to patched release"
+            git push origin HEAD:fix/custom-product-categories
+          fi
