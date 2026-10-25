@@ -12,6 +12,45 @@ function autoSku(name: string): string {
   return `${base}_${rnd}`;
 }
 
+/* ------------------------------ categorias personalizadas ------------------------------ */
+
+/** A lista já pertence a org.settings: reaproveita esquema sem migração de dados. */
+export const createCategory = mutation({
+  args: {
+    organizationId: v.id("organizations"),
+    name: v.string(),
+  },
+  handler: async (ctx, { organizationId, name }) => {
+    const { org, userId } = await requireManage(ctx, organizationId, "products");
+    const category = name.trim().replace(/\s+/g, " ");
+    if (category.length < 2 || category.length > 60)
+      bad("A categoria deve ter entre 2 e 60 caracteres.");
+
+    const current = org.settings.productCategories;
+    const norm = (s: string) => s.trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR");
+    if (current.some(c => norm(c) === norm(category)))
+      bad("Esta categoria já está cadastrada.");
+
+    // Produtos existentes podem trazer categorias legadas ainda não presentes
+    // na lista de configurações. Não criar duas com nomes equivalentes.
+    const products = await ctx.db.query("products")
+      .withIndex("by_org", q => q.eq("organizationId", org._id)).collect();
+    if (products.some(p => norm(p.category) === norm(category)))
+      bad("Esta categoria já está em uso por um produto.");
+
+    if (current.length >= 40) bad("Limite de 40 categorias atingido.");
+    await ctx.db.patch(org._id, {
+      settings: { ...org.settings, productCategories: [...current, category] },
+      updatedAt: Date.now(),
+    });
+    await audit(ctx, org._id, userId, {
+      action: "criou", module: "Produtos",
+      recordType: "categories", summary: `Categoria de produto "${category}" criada`,
+    });
+    return category;
+  },
+});
+
 /* ------------------------------ consultas ------------------------------ */
 
 export const list = query({

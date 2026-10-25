@@ -726,3 +726,69 @@ test("Agenda não cria mais venda e PDV recusa desvio de cliente, serviço e pre
     organizationId: other.orgId, appointmentId,
   })).rejects.toThrow(/não encontrado/i);
 });
+
+
+/* ----------------------- Categorias personalizadas de produtos ----------------------- */
+
+test("categoria personalizada é salva, aparece no catálogo e funciona no PDV", async () => {
+  const owner = await seedOwner("category-owner@barbearia.test");
+  const category = await owner.t2.mutation(api.products.createCategory, {
+    organizationId: owner.orgId, name: "  Bonés  ",
+  });
+  expect(category).toBe("Bonés");
+  const org = await t.run(ctx => ctx.db.get(owner.orgId));
+  expect(org?.settings.productCategories).toContain("Bonés");
+
+  const productId = await owner.t2.mutation(api.products.create, {
+    organizationId: owner.orgId,
+    name: "Boné preto",
+    category,
+    costCents: 2500,
+    priceCents: 5000,
+    stock: 4,
+    minStock: 1,
+  });
+  const sale = await owner.t2.mutation(api.sales.createSale, {
+    organizationId: owner.orgId,
+    items: [{ kind: "produto", refId: productId, qty: 1 }],
+    payments: [{ method: "pix", amountCents: 5000 }],
+  });
+  expect(sale.totalCents).toBe(5000);
+  const product = await t.run(ctx => ctx.db.get(productId));
+  expect(product?.category).toBe("Bonés");
+  expect(product?.stock).toBe(3);
+});
+
+test("categorias pertencem somente à barbearia e rejeitam nomes repetidos", async () => {
+  const a = await seedOwner("categories-a@barbearia.test");
+  const b = await seedOwner("categories-b@barbearia.test");
+  await a.t2.mutation(api.products.createCategory, {
+    organizationId: a.orgId, name: "Bebidas",
+  });
+  await expect(a.t2.mutation(api.products.createCategory, {
+    organizationId: a.orgId, name: "  bebidas  ",
+  })).rejects.toThrow(/já está cadastrada/i);
+  await expect(b.t2.mutation(api.products.createCategory, {
+    organizationId: a.orgId, name: "Roupas",
+  })).rejects.toThrow(/não tem acesso/i);
+  await b.t2.mutation(api.products.createCategory, {
+    organizationId: b.orgId, name: "Bebidas",
+  });
+  const [orgA, orgB] = await t.run(ctx => Promise.all([
+    ctx.db.get(a.orgId), ctx.db.get(b.orgId),
+  ]));
+  expect(orgA?.settings.productCategories).toContain("Bebidas");
+  expect(orgB?.settings.productCategories).toContain("Bebidas");
+  expect(orgB?.settings.productCategories).not.toContain("Roupas");
+});
+
+test("perfil sem gestão de produtos não cadastra categorias", async () => {
+  const owner = await seedOwner("categories-permissions@barbearia.test");
+  const viewer = await seedStaff(owner, "viewer");
+  await expect(viewer.t2.mutation(api.products.createCategory, {
+    organizationId: owner.orgId, name: "Bebidas",
+  })).rejects.toThrow(/sem permissão/i);
+  await expect(owner.t2.mutation(api.products.createCategory, {
+    organizationId: owner.orgId, name: " ",
+  })).rejects.toThrow(/entre 2 e 60 caracteres/i);
+});
