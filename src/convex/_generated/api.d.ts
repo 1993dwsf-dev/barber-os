@@ -12,6 +12,7 @@ import type * as appointments from "../appointments.js";
 import type * as auth from "../auth.js";
 import type * as auth_emailOtp from "../auth/emailOtp.js";
 import type * as backup from "../backup.js";
+import type * as barberPortal from "../barberPortal.js";
 import type * as barbers from "../barbers.js";
 import type * as cash from "../cash.js";
 import type * as clients from "../clients.js";
@@ -45,6 +46,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   "auth/emailOtp": typeof auth_emailOtp;
   backup: typeof backup;
+  barberPortal: typeof barberPortal;
   barbers: typeof barbers;
   cash: typeof cash;
   clients: typeof clients;

@@ -32,6 +32,11 @@ jobs:
       - name: Instalar dependências
         run: bun install --frozen-lockfile
 
+      # O Cloudflare não executa codegen: confira os tipos versionados antes de
+      # qualquer comando que possa regenerá-los no runner.
+      - name: Checar tipos Convex versionados (mesmo cenário do Cloudflare)
+        run: bunx tsc -b --pretty false
+
       - name: Configurar backend Convex local e gerar tipos
         run: bunx convex dev --once
 
