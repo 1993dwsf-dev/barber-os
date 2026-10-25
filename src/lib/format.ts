@@ -112,20 +112,34 @@ export const APPOINTMENT_STATUS_TONES: Record<string, string> = {
   falta: "bg-zinc-200 text-zinc-600 border-zinc-300",
 };
 
+/** CSV pt-BR para Excel e suites equivalentes: UTF-8 (BOM no download),
+ * ponto e vírgula para separar colunas, vírgula decimal nas chamadas.
+ * Textos de usuários não devem poder executar fórmulas de planilha.
+ */
 export function toCSV(headers: string[], rows: (string | number)[][]): string {
-  const esc = (v: string | number) => {
-    const s = String(v ?? "");
-    return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  const esc = (value: string | number) => {
+    const original = String(value ?? "");
+    const first = original.replace(/^[\s\p{Cc}\u200B\uFEFF]+/gu, "");
+    const plainNumber = /^[+-]?\d+(?:[.,]\d+)?$/.test(first);
+    // Excel pode interpretar valores vindos de cadastros como fórmulas.
+    // Preservamos números monetários negativos legítimos para permitir somas.
+    const safe = /^[=+\-@]/.test(first) && !plainNumber
+      ? "'" + original
+      : original;
+    return /[;"\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
   };
-  return [headers.map(esc).join(";"), ...rows.map((r) => r.map(esc).join(";"))].join("\n");
+  return [headers.map(esc).join(";"), ...rows.map(row => row.map(esc).join(";"))].join("\r\n");
 }
 
 export function downloadCSV(filename: string, csv: string): void {
+  // A extensão é sempre .csv, independentemente da origem do relatório.
+  const safeBase = filename.replace(/[\\/:*?"<>|\p{Cc}]/gu, "_").replace(/\.csv$/i, "");
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = filename;
+  a.download = safeBase + ".csv";
   a.click();
-  URL.revokeObjectURL(url);
+  // Evita revogar antes de o navegador iniciar a operação de download.
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

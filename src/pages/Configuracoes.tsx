@@ -799,7 +799,7 @@ function DataSection({ orgId, editable, compact = false }: { orgId: Id<"organiza
     <section className={compact ? "glass-chip rounded-2xl p-4" : "glass-chip rounded-2xl p-5"}>
       <SectionTitle
         title="Backup e portabilidade"
-        hint="Baixe uma cópia completa dos dados desta unidade"
+        hint="Exporte os registros disponíveis, com limite de linhas por tabela"
         action={<FileDown className="size-4 text-muted-foreground" />}
       />
       <div className="flex flex-wrap items-center gap-2">
@@ -834,9 +834,13 @@ function BackupSection({ orgId, editable }: { orgId: Id<"organizations">; editab
         />
         <BackupButton orgId={orgId} editable={editable} />
         <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-          O arquivo JSON inclui os registros de todas as tabelas vinculadas à unidade. Esse é o
-          seu backup portátil: use para guardar uma cópia externa, migrar ou atender pedidos de
-          portabilidade/exclusão de dados do cliente.
+          O JSON é uma exportação técnica de registros da unidade, com limite de 5.000 itens por
+          tabela. Ele pode ser consultado ou convertido em planilhas, mas não substitui um backup
+          completo do Convex nem inclui necessariamente o conteúdo dos anexos.
+        </p>
+        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+          Importante: ainda não existe importação/restauração de JSON nesta tela. Para recuperar
+          dados, será necessário um procedimento seguro de restauração validado e testado.
         </p>
         {!editable ? (
           <p className="mt-2 text-xs text-muted-foreground">
@@ -896,10 +900,10 @@ function BackupButton({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `barberflow-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `barber-os-exportacao-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success("Backup gerado", {
+      toast.success("Exportação JSON gerada", {
         description: `${snapshot.totalRows} registros exportados${
           snapshot.truncated.length > 0
             ? ` · tabelas limitadas: ${snapshot.truncated.join(", ")}`

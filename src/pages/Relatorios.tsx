@@ -89,7 +89,7 @@ export default function Relatorios() {
       <PageHeader
         eyebrow="Gestão"
         title="Relatórios"
-        description="Consolidado do período com receita, custos, resultado, desempenho da equipe e exportação em CSV para a contabilidade."
+        description="Consolidado do período com receita, custos, resultado, desempenho da equipe e relatórios CSV para abrir no Excel."
         actions={
           <Button
             onClick={() =>
@@ -380,6 +380,30 @@ export default function Relatorios() {
             </TabsContent>
 
             <TabsContent value="agenda" className="mt-4">
+              <div className="mb-3 flex justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="bg-white/60"
+                  onClick={() =>
+                    download(
+                      "agendamentos",
+                      ["Data", "Horário", "Cliente", "Serviço", "Barbeiro", "Status", "Valor"],
+                      bundle.appointments.map((a) => [
+                        fmtDate(a.date),
+                        a.startTime,
+                        a.clientName,
+                        a.serviceName,
+                        a.barberName,
+                        a.status,
+                        real(a.priceCents),
+                      ]),
+                    )
+                  }
+                >
+                  <Download className="size-3.5" /> CSV
+                </Button>
+              </div>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 {[
                   { label: "Agendamentos", value: s.appointmentsCount },
