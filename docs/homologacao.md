@@ -93,7 +93,9 @@ Fontes: https://developers.cloudflare.com/pages/configuration/git-integration/gi
 - [ ] Verificar que o botão "Entrar como visitante" não aparece no Pages.
 - [ ] Criar agendamento, realizar venda PIX fictícia e fechar caixa.
 - [ ] Atualizar direto as rotas `/auth`, `/app` e `/app/agenda` sem erro 404.
-- [ ] Confirmar backup, controles de permissões, custo dos planos e nenhuma credencial no bundle.
+- [ ] Confirmar exportação JSON e verificar os campos `counts` e `truncated` conforme a [documentação sobre visualização e futura restauração](relatorios-csv-e-exportacao-json.md#como-visualizar-o-backup-json).
+- [ ] Testar controles de permissões, custos dos planos e ausência de credenciais no bundle.
+- [ ] **Pendente antes de dados reais:** estabelecer backups recuperáveis, com teste de restauração em QA; o JSON exportado pelo app **não pode ser importado** atualmente. Consulte a [Issue #26](https://github.com/1993dwsf-dev/barber-os/issues/26).
 
 A hospedagem de homologação pode ser acessível a qualquer pessoa que tenha a URL. A restrição de e-mail não equivale a uma plataforma comercial segura, e o endpoint Convex ainda existe publicamente. Não armazene dados pessoais de clientes reais.
 
