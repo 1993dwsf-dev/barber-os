@@ -18,6 +18,15 @@ Agenda e clientes, equipe, serviços, produtos, estoque, PDV, caixa, despesas, r
 
 O login usa **Convex Auth** com códigos de seis dígitos enviados pela **API Resend**. Um novo login com senha, recuperação de acesso e Google OAuth está sendo desenvolvido atrás de flags desligadas por padrão; veja [docs/autenticacao-v2.md](docs/autenticacao-v2.md). O identificador interno `email-otp` foi mantido. O login não depende do ambiente em que o sistema foi originalmente desenvolvido. Sessões anteriores à migração para Convex Auth precisarão de novo login. O Bun é o gerenciador de dependências oficial do projeto; use `bun install --frozen-lockfile` com o `bun.lock` versionado. O antigo lockfile npm foi removido por estar desatualizado.
 
+## Relatórios, exportação de dados e segurança de backups
+
+- **Relatórios para Excel e similares:** downloads de relatórios em **CSV** (UTF-8, colunas separadas por ponto e vírgula). Veja [Relatórios CSV e exportação JSON](docs/relatorios-csv-e-exportacao-json.md).
+- **Exportação técnica em JSON:** acesse **Configurações → Backup → Exportar dados (JSON)**. Para **visualizar**, abra o arquivo no VS Code/Notepad++ ou, no Excel com Power Query, use **Dados → Obter Dados → De Arquivo → De JSON** e expanda `data` → a tabela desejada.
+- **Restauração:** **a aplicação ainda NÃO permite importar um arquivo JSON para recuperar os dados**. A exportação limita cada tabela a 5.000 registros (verifique `truncated`) e não inclui o conteúdo binário de anexos. Ela não substitui um backup integral e testado do Convex.
+- **Proteção de dados:** o JSON pode conter informações pessoais e financeiras. Guarde-o em local protegido, não o envie para conversores online desconhecidos e não tente inseri-lo diretamente no banco. O procedimento de restauração segura está pendente na [Issue #26](https://github.com/1993dwsf-dev/barber-os/issues/26).
+
+**Documentação completa:** [Como visualizar o backup JSON e como restaurar os dados no futuro](docs/relatorios-csv-e-exportacao-json.md#como-visualizar-o-backup-json).
+
 ## Testes
 
 ```bash
