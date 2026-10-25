@@ -394,7 +394,8 @@ const schema = defineSchema(
       .index("by_org", ["organizationId"])
       .index("by_org_date", ["organizationId", "date"])
       .index("by_org_client", ["organizationId", "clientId"])
-      .index("by_org_barber", ["organizationId", "barberId"]),
+      .index("by_org_barber", ["organizationId", "barberId"])
+      .index("by_org_appointment", ["organizationId", "appointmentId"]),
 
     saleItems: defineTable({
       organizationId: v.id("organizations"),

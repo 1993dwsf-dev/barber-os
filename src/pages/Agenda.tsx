@@ -14,6 +14,7 @@ import {
   UserX,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,13 +40,10 @@ import { EmptyState, Loading, PageHeader, SectionTitle, Tone } from "@/component
 import {
   APPOINTMENT_STATUS_LABELS,
   APPOINTMENT_STATUS_TONES,
-  PAYMENT_LABELS,
   WEEKDAY_LABELS,
   brl,
-  centsToInput,
   fmtDate,
   fmtPhone,
-  reaisToCents,
   whatsappLink,
 } from "@/lib/format";
 import { addDaysISO, todayISO, weekdayOf } from "@/lib/dates";
@@ -65,6 +63,7 @@ type AgendaRow = {
   barberName: string;
   barberColor: string;
   serviceName: string;
+  saleId?: Id<"sales">;
 };
 
 export default function Agenda() {
@@ -129,7 +128,7 @@ export default function Agenda() {
       <PageHeader
         eyebrow="Operação"
         title="Agenda"
-        description="Organize os atendimentos por barbeiro, confirme presence, registre faltas e conclua o serviço gerando a venda automaticamente."
+        description="Organize os atendimentos e encaminhe a cobrança ao PDV. Cada agendamento gera somente uma venda vinculada."
         actions={
           canEdit("agenda") ? (
             <Button onClick={() => setOpen(true)}>
@@ -233,6 +232,7 @@ export default function Agenda() {
                     key={a._id}
                     row={a}
                     canEdit={canEdit("agenda")}
+                    canCharge={canEdit("pos")}
                     onStatus={(status) =>
                       setStatus({ organizationId: orgId, appointmentId: a._id, status })
                     }
@@ -355,53 +355,14 @@ export default function Agenda() {
 function AppointmentCard({
   row,
   canEdit,
+  canCharge,
   onStatus,
 }: {
   row: AgendaRow;
   canEdit: boolean;
+  canCharge: boolean;
   onStatus: (status: "confirmado" | "em_atendimento" | "cancelado" | "falta") => void;
 }) {
-  const { orgId, org } = useOrg();
-  const complete = useMutation(api.appointments.complete);
-  const [paying, setPaying] = useState(false);
-  const [method, setMethod] = useState<"dinheiro" | "debito" | "credito" | "pix">("pix");
-  const [amount, setAmount] = useState(centsToInput(row.priceCents));
-  const [discount, setDiscount] = useState("0,00");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const methods = org?.settings.activePaymentMethods ?? ["pix"];
-  const valueCents = reaisToCents(amount);
-  const discountCents = reaisToCents(discount);
-  const total = row.priceCents - discountCents;
-
-  async function finish() {
-    if (!orgId) return;
-    if (valueCents !== total) {
-      setError(
-        `O valor pago (${brl(valueCents)}) precisa ser igual ao total do atendimento (${brl(total)}).`,
-      );
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      await complete({
-        organizationId: orgId,
-        appointmentId: row._id,
-        payments: [{ method, amountCents: valueCents }],
-        discountCents: discountCents || undefined,
-      });
-      setPaying(false);
-      toast.success("Atendimento concluído", {
-        description: "Venda, comissão, caixa e fidelidade foram registrados.",
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Não foi possível concluir.");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <li className="rounded-xl glass-chip p-3">
@@ -458,9 +419,11 @@ function AppointmentCard({
                 Iniciar atendimento
               </Button>
             ) : null}
-            <Button size="sm" className="h-8 text-xs" onClick={() => setPaying((v) => !v)}>
-              Concluir e cobrar
-            </Button>
+            {canCharge ? (
+              <Button size="sm" className="h-8 text-xs" asChild>
+                <Link to={`/app/pdv?appointmentId=${row._id}`}>Cobrar no PDV</Link>
+              </Button>
+            ) : null}
             <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => onStatus("falta")}>
               <UserX className="size-3.5" /> Falta
             </Button>
@@ -471,55 +434,10 @@ function AppointmentCard({
         ) : null}
       </div>
 
-      {paying ? (
-        <div className="mt-3 flex flex-col gap-3 rounded-xl border border-white/70 bg-white/55 p-3">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div>
-              <Label className="text-xs">Forma de pagamento</Label>
-              <Select value={method} onValueChange={(v) => setMethod(v as typeof method)}>
-                <SelectTrigger className="glass-input mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(["dinheiro", "debito", "credito", "pix"] as const)
-                    .filter((m) => methods.includes(m))
-                    .map((m) => (
-                      <SelectItem key={m} value={m}>
-                        {PAYMENT_LABELS[m]}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Valor recebido</Label>
-              <Input
-                className="glass-input mt-1"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                inputMode="decimal"
-              />
-            </div>
-            <div>
-              <Label className="text-xs">Desconto (R$)</Label>
-              <Input
-                className="glass-input mt-1"
-                value={discount}
-                onChange={(e) => setDiscount(e.target.value)}
-                inputMode="decimal"
-              />
-            </div>
-          </div>
-          {error ? <p className="text-xs text-rose-600">{error}</p> : null}
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">
-              Total a cobrar: <strong className="text-foreground">{brl(total)}</strong>
-            </span>
-            <Button size="sm" onClick={finish} disabled={busy}>
-              Confirmar venda
-            </Button>
-          </div>
-        </div>
+      {row.status === "concluido" && row.saleId ? (
+        <p className="mt-2 text-xs text-emerald-700">
+          Atendimento concluído e registrado no PDV.
+        </p>
       ) : null}
     </li>
   );

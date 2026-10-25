@@ -653,3 +653,76 @@ test("usuário de outra barbearia não consegue consultar o plano alheio", async
     organizationId: ownerA.orgId,
   })).rejects.toThrow(/não tem acesso/i);
 });
+
+
+/* ----------------------- Cobrança única do agendamento ----------------------- */
+
+test("PDV conclui atendimento somente uma vez e bloqueia nova cobrança vinculada", async () => {
+  const owner = await seedOwner("checkout-owner@barbearia.test");
+  const { clientId, barberId, serviceId } = await seedCatalog(owner);
+  const appointmentId = await owner.t2.mutation(api.appointments.create, {
+    organizationId: owner.orgId, clientId, barberId, serviceId,
+    date: new Date().toISOString().slice(0, 10), startTime: "10:00",
+    priceCents: 4500, ignoreHours: true,
+  });
+  const sale = () => owner.t2.mutation(api.sales.createSale, {
+    organizationId: owner.orgId, appointmentId, clientId, barberId,
+    items: [{
+      kind: "servico" as const, refId: serviceId, qty: 1,
+      barberId, unitPriceCents: 4500,
+    }],
+    payments: [{ method: "pix" as const, amountCents: 4500 }],
+  });
+  const result = await sale();
+  const appt = await t.run(ctx => ctx.db.get(appointmentId));
+  expect(appt?.status).toBe("concluido");
+  expect(appt?.paymentStatus).toBe("pago");
+  expect(appt?.saleId).toBe(result.saleId);
+  await expect(sale()).rejects.toThrow(/já foi pago|já possui uma venda/i);
+  const [sales, commissions, payments] = await t.run(async ctx => Promise.all([
+    ctx.db.query("sales").withIndex("by_org", q => q.eq("organizationId", owner.orgId)).collect(),
+    ctx.db.query("commissions").withIndex("by_org", q => q.eq("organizationId", owner.orgId)).collect(),
+    ctx.db.query("payments").withIndex("by_org", q => q.eq("organizationId", owner.orgId)).collect(),
+  ]));
+  expect(sales).toHaveLength(1);
+  expect(commissions).toHaveLength(1);
+  expect(payments).toHaveLength(1);
+  const client = await t.run(ctx => ctx.db.get(clientId));
+  expect(client?.totalSpentCents).toBe(4500);
+  expect(client?.totalVisits).toBe(1);
+});
+
+test("Agenda não cria mais venda e PDV recusa desvio de cliente, serviço e preço", async () => {
+  const owner = await seedOwner("checkout-validation@barbearia.test");
+  const { clientId, barberId, serviceId } = await seedCatalog(owner);
+  const appointmentId = await owner.t2.mutation(api.appointments.create, {
+    organizationId: owner.orgId, clientId, barberId, serviceId,
+    date: new Date().toISOString().slice(0, 10), startTime: "11:00", ignoreHours: true,
+  });
+  await expect(owner.t2.mutation(api.appointments.complete, {
+    organizationId: owner.orgId, appointmentId,
+    payments: [{ method: "pix", amountCents: 5000 }],
+  })).rejects.toThrow(/exclusiva pelo PDV/i);
+  const baseSale = {
+    organizationId: owner.orgId, appointmentId, clientId, barberId,
+    items: [{ kind: "servico" as const, refId: serviceId, qty: 1, unitPriceCents: 5000, barberId }],
+    payments: [{ method: "pix" as const, amountCents: 5000 }],
+  };
+  await expect(owner.t2.mutation(api.sales.createSale, {
+    ...baseSale, clientId: undefined,
+  })).rejects.toThrow(/não confere/i);
+  await expect(owner.t2.mutation(api.sales.createSale, {
+    ...baseSale, items: [{ ...baseSale.items[0], qty: 2 }],
+  })).rejects.toThrow(/uma única vez/i);
+  await expect(owner.t2.mutation(api.sales.createSale, {
+    ...baseSale, items: [{ ...baseSale.items[0], unitPriceCents: 3000 }],
+  })).rejects.toThrow(/preço combinados/i);
+  const linked = await owner.t2.query(api.appointments.checkoutDetail, {
+    organizationId: owner.orgId, appointmentId,
+  });
+  expect(linked.appointment._id).toBe(appointmentId);
+  const other = await seedOwner("different-checkout-owner@barbearia.test");
+  await expect(other.t2.query(api.appointments.checkoutDetail, {
+    organizationId: other.orgId, appointmentId,
+  })).rejects.toThrow(/não encontrado/i);
+});
