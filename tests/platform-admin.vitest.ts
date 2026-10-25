@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { api } from "../src/convex/_generated/api";
 import type { Id } from "../src/convex/_generated/dataModel";
 import schema from "../src/convex/schema";
+import { defaultSettings, defaultBusinessHours } from "../src/convex/orgs";
 
 const modules = import.meta.glob("../src/convex/**/*.ts");
 let t: ReturnType<typeof convexTest<typeof schema>>;
@@ -97,21 +98,8 @@ test("limita listagem a 75 unidades e não declara estatísticas incompletas com
       ownerId: admin.userId,
       inviteCode: "ZXCVBN123456",
       isDemo: false,
-      businessHours: [],
-      settings: {
-        activePaymentMethods: [],
-        serviceCategories: [],
-        productCategories: [],
-        expenseCategories: [],
-        defaultCommissionModel: "percentual" as const,
-        defaultCommissionValue: 40,
-        loyaltyPointsPerReal: 1,
-        loyaltyVisitRule: { visits: 5, points: 30 },
-        inactivityDays: 45,
-        lowStockAlerts: false,
-        cancellationPolicy: "",
-        noShowPolicy: "",
-      },
+      businessHours: defaultBusinessHours(),
+      settings: defaultSettings(),
       salesCount: 0,
       createdAt: Date.now(),
       updatedAt: Date.now(),
