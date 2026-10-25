@@ -10,6 +10,7 @@ import {
   History,
   Info,
   KeyRound,
+  Pencil,
   RefreshCw,
   Save,
   Settings2,
@@ -21,6 +22,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -586,18 +588,49 @@ function TeamSection({
   const updateRole = useMutation(api.orgs.updateMemberRole);
   const removeMember = useMutation(api.orgs.removeMember);
   const linkToMember = useMutation(api.barbers.linkToMember);
+  const updateMemberName = useMutation(api.orgs.updateMemberDisplayName);
+  const [editingMember, setEditingMember] = useState<{ id: Id<"organizationMembers">; email: string } | null>(null);
+  const [displayName, setDisplayName] = useState("");
+  const [savingName, setSavingName] = useState(false);
+  const [linkBusy, setLinkBusy] = useState<string | null>(null);
+
+  async function saveName(event: React.FormEvent) {
+    event.preventDefault();
+    if (!editingMember || savingName) return;
+    setSavingName(true);
+    try {
+      await updateMemberName({
+        organizationId: orgId,
+        memberId: editingMember.id,
+        displayName,
+      });
+      setEditingMember(null);
+      toast.success("Nome de exibição atualizado");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao atualizar nome");
+    } finally {
+      setSavingName(false);
+    }
+  }
 
   return (
     <section className="glass-chip rounded-2xl p-5">
       <SectionTitle
         title="Equipe e permissões"
-        hint="Cada perfil enxerga e edita um conjunto diferente de módulos"
+        hint="Administre contas com acesso à unidade, nomes exibidos, funções e vínculos profissionais"
         action={
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <ShieldCheck className="size-3.5" /> {members?.length ?? 0} membro(s)
           </span>
         }
       />
+      {isOwner && members?.length === 1 ? (
+        <p className="mb-3 text-xs text-muted-foreground">
+          Somente a sua conta tem acesso a esta unidade. Para adicionar funcionários,
+          compartilhe o código da seção abaixo. Cadastros de barbeiros são gerenciados na
+          página <Link to="/app/equipe" className="font-medium text-primary hover:underline">Barbeiros</Link>.
+        </p>
+      ) : null}
       {(members ?? []).length === 0 ? (
         <EmptyState title="Nenhum membro" icon={UserPlus} />
       ) : (
@@ -613,9 +646,23 @@ function TeamSection({
                     : ""}
                 </span>
               </span>
+              {isOwner ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="bg-white/60"
+                  aria-label={`Editar nome de ${m.name}`}
+                  onClick={() => {
+                    setEditingMember({ id: m._id, email: m.email });
+                    setDisplayName(m.name === "(sem nome)" ? "" : m.name);
+                  }}
+                >
+                  <Pencil className="size-3.5" /> Editar nome
+                </Button>
+              ) : null}
               <Select
                 value={m.role}
-                disabled={!isOwner}
+                disabled={!isOwner || m.role === "owner"}
                 onValueChange={async (v) => {
                   try {
                     await updateRole({
@@ -643,31 +690,46 @@ function TeamSection({
               <Tone className="glass-chip text-muted-foreground">
                 edita {RBAC_SUMMARY[m.role as AppRole]}
               </Tone>
-              {canEditSettings && !m.barberId ? (
-                <Select
-                  value="none"
-                  onValueChange={async (v) => {
-                    if (v === "none") return;
-                    await linkToMember({
-                      organizationId: orgId,
-                      memberId: m._id,
-                      barberId: v as Id<"barbers">,
-                    });
-                    toast.success("Vínculo criado");
-                  }}
-                >
-                  <SelectTrigger className="glass-input w-40">
-                    <SelectValue placeholder="Vincular" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Vincular barbeiro</SelectItem>
-                    {(barbers ?? []).map((b) => (
-                      <SelectItem key={b._id} value={b._id}>
-                        {b.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              {canEditSettings ? (
+                <div className="min-w-40">
+                  <span className="mb-1 block text-[11px] text-muted-foreground">Profissional vinculado</span>
+                  <Select
+                    value={m.barberId ?? "none"}
+                    disabled={linkBusy === m._id}
+                    onValueChange={async (value) => {
+                      setLinkBusy(m._id);
+                      try {
+                        await linkToMember({
+                          organizationId: orgId,
+                          memberId: m._id,
+                          barberId: value === "none" ? undefined : value as Id<"barbers">,
+                        });
+                        toast.success(value === "none" ? "Vínculo removido" : "Vínculo atualizado");
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Falha ao atualizar vínculo");
+                      } finally {
+                        setLinkBusy(null);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="glass-input w-48" aria-label={`Profissional vinculado a ${m.name}`}>
+                      <SelectValue placeholder="Sem vínculo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sem vínculo</SelectItem>
+                      {(barbers ?? []).map((b) => {
+                        const assigned = (members ?? []).find(
+                          other => other._id !== m._id && other.barberId === b._id,
+                        );
+                        return (
+                          <SelectItem key={b._id} value={b._id} disabled={Boolean(assigned)}>
+                            {b.name}{assigned ? " (já vinculado)" : ""}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
               ) : null}
               {isOwner && m.role !== "owner" ? (
                 <Button
@@ -690,6 +752,44 @@ function TeamSection({
           ))}
         </ul>
       )}
+      <p className="mt-3 text-xs text-muted-foreground">
+        O perfil Proprietário não pode ser rebaixado por este controle.
+        O nome exibido não altera o e-mail de login nem o cadastro do profissional.
+      </p>
+      <Dialog open={Boolean(editingMember)} onOpenChange={(open) => { if (!open && !savingName) setEditingMember(null); }}>
+        <DialogContent className="glass-strong">
+          <DialogHeader>
+            <DialogTitle>Editar nome na equipe</DialogTitle>
+            <DialogDescription>
+              O nome aparece na lista de membros desta barbearia. Não altera a conta de acesso.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={saveName} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="team-display-name">Nome de exibição</Label>
+              <Input
+                id="team-display-name"
+                className="glass-input"
+                maxLength={120}
+                autoFocus
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Nome completo"
+                required
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Login: {editingMember?.email ?? "sem e-mail"}
+            </p>
+            <DialogFooter>
+              <Button type="button" variant="outline" disabled={savingName} onClick={() => setEditingMember(null)}>Cancelar</Button>
+              <Button type="submit" disabled={savingName || displayName.trim().length < 2}>
+                {savingName ? "Salvando…" : "Salvar nome"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
@@ -829,7 +929,7 @@ const RBAC_SUMMARY: Record<AppRole, string> = {
   owner: "tudo",
   admin: "tudo",
   manager: "operação",
-  barber: "agenda e clientes",
+  barber: "somente sua agenda e comissões",
   cashier: "vendas e caixa",
   viewer: "somente leitura",
 };
