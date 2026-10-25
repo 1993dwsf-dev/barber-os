@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { audit, bad, requireMember, requireView } from "./lib";
+import { audit, bad, requireView } from "./lib";
 
 export const list = query({
   args: {
@@ -40,7 +40,7 @@ export const update = mutation({
     snoozeMinutes: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requireMember(ctx, args.organizationId);
+    await requireView(ctx, args.organizationId, "dashboard");
     const n = await ctx.db.get(args.notificationId);
     if (!n || n.organizationId !== args.organizationId) bad("Notificação não encontrada.");
     if (args.action === "ler") await ctx.db.patch(n._id, { status: "lida" });
@@ -59,7 +59,7 @@ export const update = mutation({
 export const markAllRead = mutation({
   args: { organizationId: v.id("organizations") },
   handler: async (ctx, args) => {
-    const { userId } = await requireMember(ctx, args.organizationId);
+    const { userId } = await requireView(ctx, args.organizationId, "dashboard");
     const rows = await ctx.db
       .query("notifications")
       .withIndex("by_org_status", (q) => q.eq("organizationId", args.organizationId))
