@@ -25,6 +25,7 @@ import type * as lib from "../lib.js";
 import type * as loyalty from "../loyalty.js";
 import type * as notifications from "../notifications.js";
 import type * as orgs from "../orgs.js";
+import type * as platformAdmin from "../platformAdmin.js";
 import type * as products from "../products.js";
 import type * as rateLimit from "../rateLimit.js";
 import type * as reports from "../reports.js";
@@ -59,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   loyalty: typeof loyalty;
   notifications: typeof notifications;
   orgs: typeof orgs;
+  platformAdmin: typeof platformAdmin;
   products: typeof products;
   rateLimit: typeof rateLimit;
   reports: typeof reports;

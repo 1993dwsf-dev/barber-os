@@ -18,6 +18,10 @@ Agenda e clientes, equipe, serviços, produtos, estoque, PDV, caixa, despesas, r
 
 O login usa **Convex Auth** com códigos de seis dígitos enviados pela **API Resend**. Um novo login com senha, recuperação de acesso e Google OAuth está sendo desenvolvido atrás de flags desligadas por padrão; veja [docs/autenticacao-v2.md](docs/autenticacao-v2.md). O identificador interno `email-otp` foi mantido. O login não depende do ambiente em que o sistema foi originalmente desenvolvido. Sessões anteriores à migração para Convex Auth precisarão de novo login. O Bun é o gerenciador de dependências oficial do projeto; use `bun install --frozen-lockfile` com o `bun.lock` versionado. O antigo lockfile npm foi removido por estar desatualizado.
 
+## Barber OS Admin (operador da plataforma)
+
+A central de administração global **somente de leitura** fica em `/admin`, separada do painel do proprietário de cada barbearia. O acesso é **bloqueado por padrão**, exigindo uma conta verificada cujo `users._id` e e-mail coincidam com **duas variáveis privadas** no deployment Convex. Não permite ver dados de clientes de outras unidades nem ativar faturamento. Consulte [configuração e testes de acesso](docs/barber-os-admin.md).
+
 ## Relatórios, exportação de dados e segurança de backups
 
 - **Relatórios para Excel e similares:** downloads de relatórios em **CSV** (UTF-8, colunas separadas por ponto e vírgula). Veja [Relatórios CSV e exportação JSON](docs/relatorios-csv-e-exportacao-json.md).

@@ -16,6 +16,7 @@ const AuthPage = lazy(() => import("./pages/Auth.tsx"));
 const Onboarding = lazy(() => import("./pages/Onboarding.tsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
 const BarberWorkspace = lazy(() => import("./pages/BarberWorkspace.tsx"));
+const PlatformAdmin = lazy(() => import("./pages/PlatformAdmin.tsx"));
 const Agenda = lazy(() => import("./pages/Agenda.tsx"));
 const Clientes = lazy(() => import("./pages/Clientes.tsx"));
 const ClienteDetalhe = lazy(() => import("./pages/ClienteDetalhe.tsx"));
@@ -132,6 +133,7 @@ createRoot(document.getElementById("root")!).render(
                 element={<RequireAuth><OrgProvider><Onboarding /></OrgProvider></RequireAuth>}
               />
 
+              <Route path="/admin" element={<RequireAuth><PlatformAdmin /></RequireAuth>} />
               <Route path="/dashboard" element={<Navigate to="/app" replace />} />
               <Route path="/app" element={<Protected><Dashboard /></Protected>} />
               <Route path="/app/meu-espaco" element={<Protected><BarberWorkspace /></Protected>} />

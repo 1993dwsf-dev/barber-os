@@ -20,6 +20,7 @@ import {
   Scissors,
   Search,
   Settings,
+  ShieldCheck,
   ShoppingBag,
   Sparkles,
   TrendingUp,
@@ -366,6 +367,7 @@ function OrgSwitcher() {
   const { memberships, org, role, select, can } = useOrg();
   const navigate = useNavigate();
   const { signOut } = useAuth();
+  const platformAdminAccess = useQuery(api.platformAdmin.access);
 
   function handleSignOut() {
     // Sai da área logada imediatamente e limpa a sessão em seguida, para não
@@ -432,6 +434,14 @@ function OrgSwitcher() {
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => navigate("/app/configuracoes")}>
               <Settings className="size-4" /> Configurações da unidade
+            </DropdownMenuItem>
+          </>
+        ) : null}
+        {platformAdminAccess === true ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => navigate("/admin")}>
+              <ShieldCheck className="size-4" /> Barber OS Admin
             </DropdownMenuItem>
           </>
         ) : null}
