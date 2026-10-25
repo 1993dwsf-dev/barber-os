@@ -823,3 +823,95 @@ test("perfil sem gestão de produtos não cadastra categorias", async () => {
     organizationId: owner.orgId, name: " ",
   })).rejects.toThrow(/entre 2 e 60 caracteres/i);
 });
+
+
+/* ------------------------------ gestão de membros ------------------------------ */
+
+test("proprietário edita nome exibido na unidade, sem alterar login ou nome global", async () => {
+  const owner = await seedOwner("owner-member-name@barbearia.test");
+  const staff = await seedStaff(owner, "barber");
+  const members = await owner.t2.query(api.orgs.listMembers, { organizationId: owner.orgId });
+  const me = members.find(m => m.userId === owner.userId)!;
+  const employee = members.find(m => m.userId === staff.userId)!;
+
+  expect(await owner.t2.mutation(api.orgs.updateMemberDisplayName, {
+    organizationId: owner.orgId,
+    memberId: me._id,
+    displayName: "  Proprietário    Principal  ",
+  })).toBe("Proprietário Principal");
+
+  expect(await owner.t2.mutation(api.orgs.updateMemberDisplayName, {
+    organizationId: owner.orgId,
+    memberId: employee._id,
+    displayName: "Barbeiro de Teste",
+  })).toBe("Barbeiro de Teste");
+
+  const visible = await owner.t2.query(api.orgs.listMembers, { organizationId: owner.orgId });
+  expect(visible.find(m => m._id === me._id)?.name).toBe("Proprietário Principal");
+  expect(visible.find(m => m._id === employee._id)?.name).toBe("Barbeiro de Teste");
+  expect((await t.run(ctx => ctx.db.get(owner.userId)))?.name).toBe("Dona Proprietária");
+  expect((await t.run(ctx => ctx.db.get(staff.userId)))?.name).toBe("Equipe barber");
+
+  await expect(staff.t2.mutation(api.orgs.updateMemberDisplayName, {
+    organizationId: owner.orgId, memberId: me._id, displayName: "Invasor",
+  })).rejects.toThrow(/proprietário/i);
+  await expect(owner.t2.mutation(api.orgs.updateMemberDisplayName, {
+    organizationId: owner.orgId, memberId: employee._id, displayName: " ",
+  })).rejects.toThrow(/informe/i);
+  await expect(owner.t2.mutation(api.orgs.updateMemberDisplayName, {
+    organizationId: owner.orgId, memberId: employee._id, displayName: "X",
+  })).rejects.toThrow(/pelo menos 2 caracteres/i);
+  await expect(owner.t2.mutation(api.orgs.updateMemberRole, {
+    organizationId: owner.orgId, memberId: me._id, role: "barber",
+  })).rejects.toThrow(/pelo menos um proprietário/i);
+  await expect(owner.t2.mutation(api.orgs.removeMember, {
+    organizationId: owner.orgId, memberId: me._id,
+  })).rejects.toThrow(/pelo menos um proprietário/i);
+});
+
+test("proprietário pode modificar e desfazer vínculos sem expor o perfil de outro funcionário", async () => {
+  const owner = await seedOwner("owner-linked-team@barbearia.test");
+  const outsider = await seedOwner("owner-outsider-team@barbearia.test");
+  const staff = await seedStaff(owner, "barber");
+  const { barberId: firstProfile } = await seedCatalog(owner);
+  const secondProfile = await owner.t2.mutation(api.barbers.create, {
+    organizationId: owner.orgId, name: "Barbeiro Dois",
+  });
+  const members = await owner.t2.query(api.orgs.listMembers, { organizationId: owner.orgId });
+  const me = members.find(m => m.userId === owner.userId)!;
+  const employee = members.find(m => m.userId === staff.userId)!;
+
+  await owner.t2.mutation(api.barbers.linkToMember, {
+    organizationId: owner.orgId, memberId: me._id, barberId: firstProfile,
+  });
+  await owner.t2.mutation(api.barbers.linkToMember, {
+    organizationId: owner.orgId, memberId: employee._id, barberId: secondProfile,
+  });
+  await expect(owner.t2.mutation(api.barbers.linkToMember, {
+    organizationId: owner.orgId, memberId: employee._id, barberId: firstProfile,
+  })).rejects.toThrow(/já está vinculado/i);
+
+  await owner.t2.mutation(api.barbers.linkToMember, {
+    organizationId: owner.orgId, memberId: me._id,
+  });
+  await owner.t2.mutation(api.barbers.linkToMember, {
+    organizationId: owner.orgId, memberId: employee._id, barberId: firstProfile,
+  });
+
+  const refreshed = await owner.t2.query(api.orgs.listMembers, { organizationId: owner.orgId });
+  expect(refreshed.find(m => m._id === me._id)?.barberId).toBeUndefined();
+  expect(refreshed.find(m => m._id === employee._id)?.barberId).toBe(firstProfile);
+  expect((await staff.t2.query(api.barberPortal.myWorkspace, {
+    organizationId: owner.orgId,
+  })).linked).toBe(true);
+
+  const otherMember = (await outsider.t2.query(api.orgs.listMembers, {
+    organizationId: outsider.orgId,
+  }))[0];
+  await expect(owner.t2.mutation(api.orgs.updateMemberDisplayName, {
+    organizationId: owner.orgId, memberId: otherMember._id, displayName: "Não autorizado",
+  })).rejects.toThrow(/não encontrado/i);
+  await expect(owner.t2.mutation(api.barbers.linkToMember, {
+    organizationId: owner.orgId, memberId: otherMember._id, barberId: secondProfile,
+  })).rejects.toThrow(/outra unidade|não encontrado|Membro/i);
+});
