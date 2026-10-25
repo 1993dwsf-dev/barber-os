@@ -7,14 +7,15 @@ import { ConvexReactClient } from "convex/react";
 import React, { StrictMode, lazy, Suspense } from "react";
 import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import "./index.css";
-import { OrgProvider } from "@/lib/org-context";
+import { OrgProvider, useOrg } from "@/lib/org-context";
 
 const Landing = lazy(() => import("./pages/Landing.tsx"));
 const AuthPage = lazy(() => import("./pages/Auth.tsx"));
 const Onboarding = lazy(() => import("./pages/Onboarding.tsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
+const BarberWorkspace = lazy(() => import("./pages/BarberWorkspace.tsx"));
 const Agenda = lazy(() => import("./pages/Agenda.tsx"));
 const Clientes = lazy(() => import("./pages/Clientes.tsx"));
 const ClienteDetalhe = lazy(() => import("./pages/ClienteDetalhe.tsx"));
@@ -88,13 +89,26 @@ class RootErrorBoundary extends React.Component<
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
+/** O barbeiro não acessa as rotas operacionais digitando seus endereços. */
+function RoleGate({ children }: { children: ReactNode }) {
+  const { role } = useOrg();
+  const { pathname } = useLocation();
+  if (role === "barber" && pathname !== "/app/meu-espaco") {
+    return <Navigate to="/app/meu-espaco" replace />;
+  }
+  if (role !== "barber" && pathname === "/app/meu-espaco") {
+    return <Navigate to="/app" replace />;
+  }
+  return <AppShell>{children}</AppShell>;
+}
+
 /** Rota autenticada: exige sessão + unidade ativa e monta o shell do app. */
 function Protected({ children }: { children: ReactNode }) {
   return (
     <RequireAuth>
       <OrgProvider>
         <RequireOrg>
-          <AppShell>{children}</AppShell>
+          <RoleGate>{children}</RoleGate>
         </RequireOrg>
       </OrgProvider>
     </RequireAuth>
@@ -120,6 +134,7 @@ createRoot(document.getElementById("root")!).render(
 
               <Route path="/dashboard" element={<Navigate to="/app" replace />} />
               <Route path="/app" element={<Protected><Dashboard /></Protected>} />
+              <Route path="/app/meu-espaco" element={<Protected><BarberWorkspace /></Protected>} />
               <Route path="/app/agenda" element={<Protected><Agenda /></Protected>} />
               <Route path="/app/pdv" element={<Protected><Pdv /></Protected>} />
               <Route path="/app/caixa" element={<Protected><Caixa /></Protected>} />
