@@ -172,6 +172,41 @@ describe("verificação manual de pagamento Sandbox — somente leitura", () => 
     vi.stubEnv("BARBER_ASAAS_API_KEY", "sandbox_example_key_DO_NOT_USE_IN_PRODUCTION_0123456789");
   }
 
+  test("diagnóstico identifica cada bloqueio sem revelar segredo de API", async () => {
+    enableLookup();
+    const admin = await account("admin@example.test");
+    vi.stubEnv("BARBER_PLATFORM_ADMIN_USER_ID", admin.userId);
+    vi.stubEnv("BARBER_PLATFORM_ADMIN_EMAIL", "admin@example.test");
+    const ready = await admin.caller.query(api.platformAdmin.billingInbox, {});
+    expect(ready.lookupEnabled).toBe(true);
+    expect(Object.values(ready.lookupChecks).every(Boolean)).toBe(true);
+    expect(JSON.stringify(ready)).not.toContain("sandbox_example_key");
+
+    vi.stubEnv("BARBER_ASAAS_LOOKUP_ENABLED", "false");
+    const flagMissing = await admin.caller.query(api.platformAdmin.billingInbox, {});
+    expect(flagMissing.lookupEnabled).toBe(false);
+    expect(flagMissing.lookupChecks.lookupEnabledFlag).toBe(false);
+    expect(flagMissing.lookupChecks.apiKeyConfigured).toBe(true);
+
+    vi.stubEnv("BARBER_ASAAS_LOOKUP_ENABLED", "true");
+    vi.stubEnv("BARBER_ASAAS_API_KEY", "");
+    const keyMissing = await admin.caller.query(api.platformAdmin.billingInbox, {});
+    expect(keyMissing.lookupChecks.apiKeyConfigured).toBe(false);
+    expect(keyMissing.lookupChecks.apiKeyValidFormat).toBe(false);
+
+    vi.stubEnv("BARBER_ASAAS_API_KEY", "short");
+    const invalidKey = await admin.caller.query(api.platformAdmin.billingInbox, {});
+    expect(invalidKey.lookupChecks.apiKeyConfigured).toBe(true);
+    expect(invalidKey.lookupChecks.apiKeyValidFormat).toBe(false);
+    expect(invalidKey.lookupEnabled).toBe(false);
+
+    enableLookup();
+    vi.stubEnv("CONVEX_CLOUD_URL", "https://outro-dev.convex.cloud");
+    const wrongDeployment = await admin.caller.query(api.platformAdmin.billingInbox, {});
+    expect(wrongDeployment.lookupChecks.developmentDeployment).toBe(false);
+    expect(wrongDeployment.lookupEnabled).toBe(false);
+  });
+
   test("nega verificação sem flag mesmo quando existe webhook", async () => {
     enableSandbox();
     const admin = await account("admin@example.test");
