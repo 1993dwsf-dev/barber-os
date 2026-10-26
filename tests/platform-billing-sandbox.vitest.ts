@@ -124,3 +124,42 @@ describe("inbox transacional, restrita a sandbox", () => {
     expect(JSON.stringify(inbox)).not.toContain("organizationId");
   });
 });
+
+describe("rota HTTP real do Convex (simulada via convex-test)", () => {
+  const path = "/integrations/asaas/webhook";
+  const token = "xQYJ_4ftWgYxK7pTmeHLhV9JbZ6fDMZTd5NA7";
+
+  function send(input: unknown, auth: string | null = token) {
+    return t.fetch(path, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(auth === null ? {} : { "asaas-access-token": auth }),
+      },
+      body: JSON.stringify(input),
+    });
+  }
+
+  test("rejeita por padrão e quando falta autenticação", async () => {
+    const payload = { id: event.eventId, event: event.eventType, payment: { id: event.paymentId } };
+    expect((await send(payload)).status).toBe(404);
+    enableSandbox();
+    vi.stubEnv("BARBER_ASAAS_WEBHOOK_TOKEN", token);
+    expect((await send(payload, null)).status).toBe(401);
+    expect((await send(payload, "wrong")).status).toBe(401);
+    expect((await t.run(ctx => ctx.db.query("billingWebhookInbox").collect())).toHaveLength(0);
+  });
+
+  test("registra evento válido, ignora entrega duplicada e rejeita payload incorreto", async () => {
+    enableSandbox();
+    vi.stubEnv("BARBER_ASAAS_WEBHOOK_TOKEN", token);
+    const payload = { id: event.eventId, event: event.eventType, payment: { id: event.paymentId } };
+    expect((await send(payload)).status).toBe(200);
+    expect((await send(payload)).status).toBe(200);
+    expect((await send({ id: "evt_bad", event: "PAYMENT_RECEIVED", payment: {} })).status).toBe(400);
+    expect((await send({ id: "evt_unknown", event: "TRANSFER_CREATED" })).status).toBe(200);
+    const events = await t.run(ctx => ctx.db.query("billingWebhookInbox").collect());
+    expect(events).toHaveLength(1);
+    expect(events[0].eventId).toBe(event.eventId);
+  });
+});
