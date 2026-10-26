@@ -4,7 +4,6 @@ import { action, internalMutation, mutation, query } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { HttpError } from "./lib";
 import { requirePlatformAdmin } from "./platformAdmin";
-import type { Id } from "./_generated/dataModel";
 import {
   SANDBOX_ASAAS_GATEWAY, createSandboxPaymentBody, isAllowedDueDate,
   parseAsaasReferenceMatches, sandboxOrderIssueEnabled, validCustomerId,
