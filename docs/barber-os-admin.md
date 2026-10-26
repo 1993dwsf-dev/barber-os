@@ -135,3 +135,40 @@ O relatório `barber-os-admin-unidades-AAAA-MM-DD.csv` usa **UTF-8 com BOM**, se
 A classificação de prazo refere-se ao **registro de teste**, não ao status efetivo de cobrança ou ao bloqueio comercial. Um teste pode estar com prazo expirado no banco sem impedir o uso da barbearia quando `BARBER_AUTH_COMMERCIAL_ENABLED` e `BARBER_BILLING_ENFORCED` estão desligados. Um registro `suspended` não é classificado como prazo expirado nos contadores de `trialing`.
 
 O relatório **não é uma exportação total da plataforma**: para mais de 75 unidades será necessária paginação autorizada no backend. Esta etapa **não cria automações de envio de e-mail, notificações externas ou pagamentos**. Como modifica somente o frontend e uma função de formatação, não exige novo comando de deploy Convex.
+
+
+## Etapa v5 — recepção de eventos Asaas Sandbox (inbox isolada)
+
+**Objetivo:** preparar o caminho para assinaturas comerciais sem movimentar dinheiro e **sem conceder acesso com base somente no webhook**. O adaptador inicial utiliza o **Asaas Sandbox**, que possui credenciais e base independentes da produção.
+
+### Garantias da implementação
+
+- Novo endpoint Convex HTTP: `POST /integrations/asaas/webhook` em **CONVEX_SITE_URL**, não em `VITE_CONVEX_URL`.
+- Aceita exclusivamente `application/json`, limita corpo a **64 KiB**, valida formato e somente eventos `PAYMENT_*` explicitamente reconhecidos.
+- Antes de ler o corpo, exige `asaas-access-token` igual ao token privado configurado.
+- **Desativado por padrão**. Exige `BARBER_ASAAS_WEBHOOK_ENABLED=true`, `BARBER_ASAAS_ENV=sandbox`, `BARBER_BILLING_ENFORCED` diferente de `true` e `CONVEX_CLOUD_URL=https://unique-tortoise-387.convex.cloud`.
+- Eventos são deduplicados pelo **ID de evento** dentro de uma mutation transacional.
+- Guarda apenas `eventId`, `eventType`, `paymentId`, `subscriptionId` opcional e data de recebimento. Não persiste JSON bruto, valores, CPF, e-mail, telefone ou dados do comprador.
+- O Admin exibe os **30 eventos mais recentes**, rotulados **Não conciliado**. O registro de evento não comprova liquidação financeira.
+- Nenhuma ligação automática de `paymentId` a uma barbearia, nenhuma criação de assinatura, nenhum MRR e **nenhum update de `organizationEntitlements`**. A cobrança operacional está fora do escopo.
+- `401` para token ausente/incorreto, `404` com integração desativada, `400` para payload inválido, `200` para evento reconhecido persistido/duplicado ou não relacionado, e `503` se o banco falhar (reentrega pelo provedor).
+
+### Ativar SOMENTE após criar uma conta de testes
+
+1. Criar conta **separada no** [Asaas Sandbox](https://sandbox.asaas.com/). Não usar API key ou conta de produção.
+2. No deployment **Development** `dev:unique-tortoise-387` do Convex, criar variáveis privadas:
+   - `BARBER_ASAAS_ENV=sandbox`
+   - `BARBER_ASAAS_WEBHOOK_TOKEN=<token aleatório exclusivo de 32 a 255 caracteres, sem espaços>`
+   - `BARBER_ASAAS_WEBHOOK_ENABLED=true`
+3. No painel Asaas Sandbox, cadastrar webhook de cobrança apontando para **`CONVEX_SITE_URL/integrations/asaas/webhook`** do deployment `unique-tortoise-387`. Configure o campo `authToken` com exatamente o mesmo valor da variável `BARBER_ASAAS_WEBHOOK_TOKEN`. **Não confundir authToken com a API key**.
+4. Selecionar eventos de cobrança necessários, disparar um evento fictício de teste e verificar o registro no Admin.
+5. Testar reentrega do mesmo evento e confirmar que não cria duplicatas. Testar token inválido e confirmar HTTP 401.
+6. Desabilitar após os testes removendo a flag ou definindo `BARBER_ASAAS_WEBHOOK_ENABLED=false`.
+
+**Não inclua os segredos no repositório, Cloudflare Pages ou ChatGPT; configure-os diretamente no dashboard Convex e Asaas.** Nunca rode `bunx convex deploy` com esta integração experimental. A exclusividade do host impede que as funções de webhook sejam habilitadas acidentalmente em outro deployment.
+
+### Pendências antes de cobrar clientes reais
+
+A etapa seguinte requer: vínculo seguro entre conta Asaas, barbearia e plano; criação de cliente/cobrança via API com credenciais do ambiente correto; reconciliação de cobrança consultando o provedor e o vencimento/valor contratados; idempotência no provisionamento; política de renovação, cancelamento, estorno, disputa, inadimplência e prazo de tolerância; garantias de privacidade e termos legais. **Nenhum desses controles é substituído por receber uma notificação `PAYMENT_RECEIVED`.**
+
+Referências oficiais: [Receber eventos](https://docs.asaas.com/docs/receba-eventos-do-asaas-no-seu-endpoint-de-webhook), [Idempotência](https://docs.asaas.com/docs/como-implementar-idempotencia-em-webhooks), [Sandbox](https://docs.asaas.com/docs/sandbox).
