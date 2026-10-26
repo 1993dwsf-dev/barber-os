@@ -133,7 +133,7 @@ export default function Onboarding() {
               Vamos configurar sua barbearia
             </h1>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              O BarberFlow OS guarda cada operação no banco: quando você concluir um
+              O Barber OS guarda cada operação no banco: quando você concluir um
               atendimento, a venda, o caixa, a comissão e a fidelidade são gravados juntos.
             </p>
           </div>
