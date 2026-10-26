@@ -121,3 +121,17 @@ O desenho suporta pilotos. **Suspensão de clientes pagantes, reativação comer
 ### Ajuste de usabilidade — formulário de gestão de testes
 
 A interface apresenta agora contador da justificativa (mínimo 12, máximo 350 caracteres), aviso contextual quando os campos ainda não autorizam o envio, validação de dias inteiros entre 1 e 30 e histórico com verbos legíveis em português. O botão continua bloqueado até todos os requisitos serem atendidos; a validação real permanece no servidor. Essa alteração é **somente frontend**: não exige um novo deploy do Convex e não altera cobrança, acesso ou dados.
+
+
+## Etapa v4 — visão de vencimentos e exportação CSV
+
+O painel administrativo passa a apresentar, **somente entre as 75 unidades mais recentes autorizadas**:
+- Quantas unidades em `trialing` possuem prazo futuro em até 7 dias;
+- Quantos testes têm `trialEndsAt` igual ou anterior ao instante da consulta;
+- Filtro por testes próximos do vencimento, já expirados ou sem data de término.
+
+O relatório `barber-os-admin-unidades-AAAA-MM-DD.csv` usa **UTF-8 com BOM**, separador **ponto e vírgula** e datas ISO `AAAA-MM-DD`, para facilitar a abertura no Excel/LibreOffice em pt-BR. O CSV inclui **somente as unidades visíveis após a pesquisa e o filtro**, sempre dentro do limite de 75 registros retornados pela API. Não contém dados pessoais de clientes, equipe, detalhes financeiros, contatos ou credenciais. Nomes de unidade potencialmente interpretáveis como fórmulas são neutralizados.
+
+A classificação de prazo refere-se ao **registro de teste**, não ao status efetivo de cobrança ou ao bloqueio comercial. Um teste pode estar com prazo expirado no banco sem impedir o uso da barbearia quando `BARBER_AUTH_COMMERCIAL_ENABLED` e `BARBER_BILLING_ENFORCED` estão desligados. Um registro `suspended` não é classificado como prazo expirado nos contadores de `trialing`.
+
+O relatório **não é uma exportação total da plataforma**: para mais de 75 unidades será necessária paginação autorizada no backend. Esta etapa **não cria automações de envio de e-mail, notificações externas ou pagamentos**. Como modifica somente o frontend e uma função de formatação, não exige novo comando de deploy Convex.
