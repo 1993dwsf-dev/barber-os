@@ -719,6 +719,35 @@ const schema = defineSchema(
       .index("by_payment", ["paymentId"])
       .index("by_created", ["createdAt"]),
 
+    /* ------------ pedidos originados no Barber OS, somente SANDBOX ------------ */
+
+    sandboxBillingOrders: defineTable({
+      organizationId: v.id("organizations"),
+      planDraftId: v.id("platformPlanDrafts"),
+      planNameSnapshot: v.string(),
+      priceCentsSnapshot: v.number(),
+      customerId: v.string(), // referência do Asaas, jamais CPF ou dados cadastrais
+      billingType: v.union(v.literal("PIX"), v.literal("BOLETO")),
+      dueDate: v.string(), // YYYY-MM-DD
+      externalReference: v.string(), // gerada pelo servidor, identificador único
+      status: v.union(
+        v.literal("draft"), v.literal("sending"), v.literal("created"),
+        v.literal("uncertain"), v.literal("voided"),
+      ),
+      paymentId: v.optional(v.string()),
+      reason: v.string(),
+      createdBy: v.id("users"),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+      attemptStartedAt: v.optional(v.number()),
+      voidedAt: v.optional(v.number()),
+    })
+      .index("by_org", ["organizationId"])
+      .index("by_org_status", ["organizationId", "status"])
+      .index("by_created", ["createdAt"])
+      .index("by_reference", ["externalReference"])
+      .index("by_payment", ["paymentId"]),
+
     /* ------------------------------ limites de uso / abuso ------------------------------ */
 
     // Janela deslizante de tentativas por usuário e ação. Usado para barrar

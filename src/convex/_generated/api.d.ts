@@ -33,6 +33,7 @@ import type * as products from "../products.js";
 import type * as rateLimit from "../rateLimit.js";
 import type * as reports from "../reports.js";
 import type * as sales from "../sales.js";
+import type * as sandboxOrders from "../sandboxOrders.js";
 import type * as search from "../search.js";
 import type * as seed from "../seed.js";
 import type * as services from "../services.js";
@@ -71,6 +72,7 @@ declare const fullApi: ApiFromModules<{
   rateLimit: typeof rateLimit;
   reports: typeof reports;
   sales: typeof sales;
+  sandboxOrders: typeof sandboxOrders;
   search: typeof search;
   seed: typeof seed;
   services: typeof services;
