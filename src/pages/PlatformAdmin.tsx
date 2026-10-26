@@ -1125,7 +1125,7 @@ export default function PlatformAdmin() {
               {!sandboxOrders.enabled && (
                 <p role="status" className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
                   Emissão desabilitada no servidor. Requer BARBER_ASAAS_ORDER_WRITES=true,
-                  consulta Sandbox habilitada e deployment de homologação único-tortoise-387.
+                  consulta Sandbox habilitada e deployment de homologação unique-tortoise-387.
                   Não habilite em produção.
                 </p>
               )}
