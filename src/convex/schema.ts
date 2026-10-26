@@ -651,6 +651,28 @@ const schema = defineSchema(
       .index("by_org_storage", ["organizationId", "storageId"])
       .index("by_storage", ["storageId"]),
 
+    /* ---------------------- catálogo comercial interno ---------------------- */
+
+    // Rascunhos de planos do SaaS: não alteram entitlements e não cobram ninguém.
+    platformPlanDrafts: defineTable({
+      name: v.string(),
+      description: v.string(),
+      priceCents: v.number(),
+      createdBy: v.id("users"),
+      updatedBy: v.id("users"),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }).index("by_updated", ["updatedAt"]),
+
+    // Auditoria separada dos logs de cada barbearia.
+    platformAdminAuditLogs: defineTable({
+      actorId: v.id("users"),
+      action: v.string(),
+      recordType: v.string(),
+      recordId: v.string(),
+      createdAt: v.number(),
+    }).index("by_created", ["createdAt"]),
+
     /* ------------------------------ limites de uso / abuso ------------------------------ */
 
     // Janela deslizante de tentativas por usuário e ação. Usado para barrar
