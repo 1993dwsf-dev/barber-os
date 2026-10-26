@@ -1,6 +1,6 @@
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import { useAuth } from "@/hooks/use-auth";
@@ -60,6 +60,28 @@ export default function PlatformAdmin() {
   );
   const drafts = useQuery(api.platformAdmin.planDrafts, allowed === true ? {} : "skip");
   const billingInbox = useQuery(api.platformAdmin.billingInbox, allowed === true ? {} : "skip");
+  const checkSandboxPayment = useAction(api.billingSandbox.checkPaymentStatus);
+  const [checkingPayment, setCheckingPayment] = useState<string | null>(null);
+  const [paymentStatusResults, setPaymentStatusResults] = useState<
+    Record<string, { status: string; checkedAt: number }>
+  >({});
+  const [paymentCheckError, setPaymentCheckError] = useState("");
+
+  async function verifySandboxStatus(inboxId: Id<"billingWebhookInbox">) {
+    if (checkingPayment || !billingInbox?.lookupEnabled) return;
+    setCheckingPayment(inboxId);
+    setPaymentCheckError("");
+    try {
+      const result = await checkSandboxPayment({ inboxId });
+      setPaymentStatusResults(previous => ({
+        ...previous, [inboxId]: { status: result.status, checkedAt: result.checkedAt },
+      }));
+    } catch {
+      setPaymentCheckError("Não foi possível consultar o Asaas Sandbox. Verifique as configurações privadas do backend.");
+    } finally {
+      setCheckingPayment(null);
+    }
+  }
   const savePlanDraft = useMutation(api.platformAdmin.savePlanDraft);
   const managePilotTrial = useMutation(api.platformAdmin.managePilotTrial);
   const trialHistory = useQuery(
@@ -570,7 +592,7 @@ export default function PlatformAdmin() {
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
             Não há concessão ou suspensão automática de acesso nesta etapa.
-            A reconciliação financeira exige consulta autenticada à API do provedor.
+            A verificação manual de status consulta a API do provedor, sem liberar a assinatura de nenhuma unidade.
           </p>
           {!billingInbox ? (
             <p className="mt-4 text-sm text-muted-foreground">Carregando caixa de entrada…</p>
@@ -584,7 +606,7 @@ export default function PlatformAdmin() {
                     <th className="py-2 pr-3">Evento</th>
                     <th className="py-2 pr-3">Pagamento (ID)</th>
                     <th className="py-2 pr-3">Recebido em</th>
-                    <th className="py-2">Conciliação</th>
+                    <th className="py-2">Verificação no Asaas</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -593,14 +615,36 @@ export default function PlatformAdmin() {
                       <td className="py-2 pr-3 font-medium">{item.eventType}</td>
                       <td className="max-w-44 break-all py-2 pr-3 font-mono text-xs">{item.paymentId}</td>
                       <td className="py-2 pr-3">{new Date(item.receivedAt).toLocaleString("pt-BR")}</td>
-                      <td className="py-2"><Badge variant="outline">Não conciliado</Badge></td>
+                      <td className="py-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button type="button" size="sm" variant="outline"
+                            disabled={!billingInbox.lookupEnabled || checkingPayment !== null}
+                            onClick={() => void verifySandboxStatus(item.id)}>
+                            {checkingPayment === item.id ? "Consultando…" : "Consultar status"}
+                          </Button>
+                          {paymentStatusResults[item.id] ? (
+                            <div className="flex flex-col text-xs">
+                              <Badge variant="outline">
+                                {paymentStatusResults[item.id].status} (Sandbox)
+                              </Badge>
+                              <span className="mt-1 text-muted-foreground">
+                                Consultado em {new Date(paymentStatusResults[item.id].checkedAt).toLocaleString("pt-BR")}
+                              </span>
+                            </div>
+                          ) : <Badge variant="outline">Não verificado</Badge>}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
               <p className="mt-3 text-xs text-muted-foreground">
                 Mostrando no máximo os 30 eventos mais recentes; nenhum dado de comprador é armazenado.
+                {billingInbox.lookupEnabled
+                  ? " A consulta do status é pontual e não equivale a conciliação financeira ou ativação."
+                  : " Consultas ao Asaas desabilitadas até configurar a chave de API privada e a flag de verificação."}
               </p>
+              {paymentCheckError && <p role="alert" className="mt-2 text-sm text-destructive">{paymentCheckError}</p>}
             </div>
           )}
         </section>
