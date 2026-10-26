@@ -43,6 +43,7 @@ export default function Onboarding() {
   const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
   const [code, setCode] = useState("");
+  const [pilotInviteCode, setPilotInviteCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,6 +57,7 @@ export default function Onboarding() {
         phone: phone || undefined,
         email: email || undefined,
         address: address || undefined,
+        pilotInviteCode: pilotInviteCode.trim().toLowerCase() || undefined,
       });
       select(orgId);
       toast.success("Barbearia criada!", {
@@ -248,7 +250,29 @@ export default function Onboarding() {
                   disabled={busy}
                 />
               </div>
-              <Button type="submit" className="mt-2" disabled={busy || name.trim().length < 2}>
+              <div>
+                 <Label htmlFor="ob-pilot-code">Código de acesso ao piloto (se recebeu)</Label>
+                 <Input
+                   id="ob-pilot-code"
+                   type="text"
+                   autoComplete="off"
+                   autoCapitalize="none"
+                   spellCheck={false}
+                   value={pilotInviteCode}
+                   onChange={e => setPilotInviteCode(e.target.value.trim().toLowerCase())}
+                   maxLength={64}
+                   pattern="[0-9a-f]{64}"
+                   placeholder="Cole seu código exclusivo de acesso"
+                   className="glass-input mt-1.5 font-mono text-xs"
+                   disabled={busy}
+                 />
+                 <p className="mt-1 text-xs text-muted-foreground">
+                   Necessário para clientes convidados ao piloto. É diferente do convite
+                   de equipe disponível na aba “Tenho um convite”.
+                 </p>
+               </div>
+               <Button type="submit" className="mt-2" disabled={busy || name.trim().length < 2 ||
+                 (pilotInviteCode.length > 0 && !/^[0-9a-f]{64}$/.test(pilotInviteCode))}>
                 {busy ? <Loader2 className="size-4 animate-spin" /> : <Store className="size-4" />}
                 Criar barbearia
                 {!busy ? <ArrowRight className="size-4" /> : null}
