@@ -122,7 +122,7 @@ export default function PlatformAdmin() {
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-primary">
-              <ShieldCheck className="size-4" /> Área interna · somente leitura
+              <ShieldCheck className="size-4" /> Área interna · gestão restrita
             </p>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight">Barber OS Admin</h1>
             <p className="mt-1 text-sm text-muted-foreground">
