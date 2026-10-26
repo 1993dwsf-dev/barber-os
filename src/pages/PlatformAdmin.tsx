@@ -12,6 +12,13 @@ import {
   LogOut, Search, ShieldCheck, Store, Users, Eye, Pencil, Save, Tag, PauseCircle,
 } from "lucide-react";
 
+const TRIAL_ACTION_LABELS: Record<string, string> = {
+  pilot_trial_start: "Teste iniciado",
+  pilot_trial_extend: "Teste prorrogado",
+  pilot_trial_suspend: "Teste suspenso",
+  pilot_trial_resume: "Teste reativado",
+};
+
 const STATUS: Record<string, string> = {
   unconfigured: "Sem plano configurado",
   trialing: "Teste",
@@ -54,6 +61,24 @@ export default function PlatformAdmin() {
     api.platformAdmin.pilotTrialHistory,
     allowed === true && selectedOrg ? { organizationId: selectedOrg } : "skip",
   );
+  const trialReasonLength = trialReason.trim().length;
+  const trialDaysNumber = Number(trialDays);
+  const trialDaysValid = trialAction === "suspend" ||
+    (trialDays.trim().length > 0 && Number.isInteger(trialDaysNumber) &&
+      trialDaysNumber >= 1 && trialDaysNumber <= 30);
+  const trialNameConfirmed = trialConfirmName.trim() === organizationDetails?.name;
+  const trialFormHint = !trialAction
+    ? "Selecione uma ação para continuar."
+    : !trialDaysValid
+      ? "Informe um prazo de 1 a 30 dias, sem frações."
+      : trialReasonLength < 12
+        ? `A justificativa precisa de mais ${12 - trialReasonLength} caracteres.`
+        : trialReasonLength > 350
+          ? "A justificativa não pode ultrapassar 350 caracteres."
+          : !trialNameConfirmed
+            ? "Digite o nome exato da barbearia para confirmar."
+            : "Pronto para confirmar. Essa ação atualizará o registro do teste.";
+
   const trialOptions = organizationDetails && !organizationDetails.isDemo &&
     organizationDetails.source !== "billing"
     ? organizationDetails.status === "unconfigured"
@@ -78,7 +103,8 @@ export default function PlatformAdmin() {
   async function submitTrial(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!organizationDetails || !trialAction || trialSaving || !selectedOrg ||
-        !trialOptions.some(o => o.value === trialAction)) return;
+        !trialOptions.some(o => o.value === trialAction) || !trialDaysValid ||
+        trialReasonLength < 12 || trialReasonLength > 350 || !trialNameConfirmed) return;
     setTrialSaving(true);
     setTrialMessage("");
     try {
@@ -369,8 +395,12 @@ export default function PlatformAdmin() {
                     <label htmlFor="trial-reason" className="mb-1 block text-sm font-medium">Justificativa obrigatória (12 a 350 caracteres)</label>
                     <textarea id="trial-reason" required minLength={12} maxLength={350}
                       value={trialReason} onChange={e => setTrialReason(e.target.value)}
+                      aria-describedby="trial-reason-counter"
                       className="glass-input min-h-20 w-full rounded-lg border p-3 text-sm"
                       placeholder="Ex.: Prorrogação autorizada para validar recursos da agenda" />
+                    <p id="trial-reason-counter" className="mt-1 text-xs text-muted-foreground">
+                      {trialReasonLength}/350 caracteres (mínimo de 12)
+                    </p>
                   </div>
                   <div className="sm:col-span-2">
                     <label htmlFor="trial-confirm-name" className="mb-1 block text-sm font-medium">
@@ -380,13 +410,15 @@ export default function PlatformAdmin() {
                       onChange={e => setTrialConfirmName(e.target.value)} autoComplete="off" />
                   </div>
                   <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
-                    <Button type="submit" disabled={trialSaving || !trialAction ||
-                      trialConfirmName.trim() !== organizationDetails.name ||
-                      trialReason.trim().length < 12}>
+                    <Button type="submit" disabled={trialSaving || !trialAction || !trialDaysValid ||
+                      !trialNameConfirmed || trialReasonLength < 12 || trialReasonLength > 350}>
                       {trialSaving ? "Confirmando…" : "Confirmar alteração de teste"}
                     </Button>
                     <span className="text-xs text-muted-foreground">Alteração real no registro de acesso; reversível apenas por nova ação autorizada.</span>
                   </div>
+                  <p role="status" aria-live="polite" className="text-xs text-muted-foreground sm:col-span-2">
+                    {trialSaving ? "Registrando alteração..." : trialFormHint}
+                  </p>
                 </form>
               )}
               {trialMessage && <p role="status" className="mt-3 text-sm text-muted-foreground">{trialMessage}</p>}
@@ -400,7 +432,7 @@ export default function PlatformAdmin() {
                   <ul className="space-y-2">
                     {trialHistory.map(entry => (
                       <li key={entry.id} className="rounded-xl border border-border/60 p-3 text-sm">
-                        <p className="font-medium">{entry.action.replace("pilot_trial_", "")} · {fmt(entry.createdAt)}</p>
+                        <p className="font-medium">{TRIAL_ACTION_LABELS[entry.action] ?? entry.action} · {fmt(entry.createdAt)}</p>
                         <p className="text-xs text-muted-foreground">
                           {STATUS[entry.beforeStatus ?? ""] ?? entry.beforeStatus ?? "—"} → {STATUS[entry.afterStatus ?? ""] ?? entry.afterStatus ?? "—"}
                           {" · "}Fim anterior: {fmt(entry.beforeTrialEndsAt)} · Novo fim: {fmt(entry.afterTrialEndsAt)}
