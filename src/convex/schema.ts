@@ -696,6 +696,29 @@ const schema = defineSchema(
       .index("by_provider_event", ["provider", "eventId"])
       .index("by_received", ["receivedAt"]),
 
+    /* ------------ vínculos de cobrança sandbox, sem efeito nos acessos ------------ */
+
+    sandboxBillingLinks: defineTable({
+      organizationId: v.id("organizations"),
+      planDraftId: v.id("platformPlanDrafts"),
+      planNameSnapshot: v.string(),
+      priceCentsSnapshot: v.number(),
+      currency: v.literal("BRL"),
+      paymentId: v.string(),
+      sourceInboxId: v.id("billingWebhookInbox"),
+      status: v.union(v.literal("pending_review"), v.literal("voided")),
+      reason: v.string(),
+      createdBy: v.id("users"),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+      voidReason: v.optional(v.string()),
+      voidedAt: v.optional(v.number()),
+      voidedBy: v.optional(v.id("users")),
+    })
+      .index("by_org", ["organizationId"])
+      .index("by_payment", ["paymentId"])
+      .index("by_created", ["createdAt"]),
+
     /* ------------------------------ limites de uso / abuso ------------------------------ */
 
     // Janela deslizante de tentativas por usuário e ação. Usado para barrar
