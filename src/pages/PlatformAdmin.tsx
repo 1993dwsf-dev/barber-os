@@ -594,6 +594,21 @@ export default function PlatformAdmin() {
             Não há concessão ou suspensão automática de acesso nesta etapa.
             A verificação manual de status consulta a API do provedor, sem liberar a assinatura de nenhuma unidade.
           </p>
+          {billingInbox && !billingInbox.lookupEnabled && (
+            <div id="asaas-lookup-disabled-help" role="status" className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
+              <p className="font-semibold">Consulta de status desabilitada no servidor</p>
+              <p className="mt-1">
+                O botão ficará indisponível até confirmar as variáveis privadas do Convex Development
+                (unique-tortoise-387): BARBER_ASAAS_ENV=sandbox,
+                BARBER_ASAAS_LOOKUP_ENABLED=true e BARBER_ASAAS_API_KEY com a chave
+                da API do Asaas Sandbox. BARBER_BILLING_ENFORCED não pode estar habilitada.
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                O token de autenticação do webhook não substitui a chave de API.
+                Nunca configure esses segredos no navegador, Cloudflare Pages ou repositório.
+              </p>
+            </div>
+          )}
           {!billingInbox ? (
             <p className="mt-4 text-sm text-muted-foreground">Carregando caixa de entrada…</p>
           ) : billingInbox.items.length === 0 ? (
@@ -619,6 +634,7 @@ export default function PlatformAdmin() {
                         <div className="flex flex-wrap items-center gap-2">
                           <Button type="button" size="sm" variant="outline"
                             disabled={!billingInbox.lookupEnabled || checkingPayment !== null}
+                            aria-describedby={!billingInbox.lookupEnabled ? "asaas-lookup-disabled-help" : undefined}
                             onClick={() => void verifySandboxStatus(item.id)}>
                             {checkingPayment === item.id ? "Consultando…" : "Consultar status"}
                           </Button>
