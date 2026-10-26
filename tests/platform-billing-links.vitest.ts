@@ -134,6 +134,68 @@ test("valida autorização, dados da unidade, versão do plano e bloqueios comer
   })).rejects.toThrow(/mensalidade/i);
 });
 
+test("preço fica congelado após edição e cobrança não pode pertencer a duas barbearias", async () => {
+  const admin = await account("admin@example.test");
+  vi.stubEnv("BARBER_PLATFORM_ADMIN_USER_ID", admin.userId);
+  vi.stubEnv("BARBER_PLATFORM_ADMIN_EMAIL", "admin@example.test");
+  enableSandbox();
+  const ids = await createData(admin.userId);
+  const reason = "Associação comercial fictícia para conferir imutabilidade.";
+  await admin.caller.mutation(api.platformBilling.createLink, {
+    ...ids, confirmedOrganizationName: "Barbearia Alfa", reason,
+  });
+
+  await t.run(async ctx => {
+    await ctx.db.patch(ids.planDraftId, {
+      name: "Essencial atualizado", priceCents: 9900, updatedAt: Date.now() + 5000,
+    });
+  });
+  const associations = await admin.caller.query(api.platformBilling.links, {});
+  expect(associations.items[0].planName).toBe("Essencial");
+  expect(associations.items[0].priceCents).toBe(5990);
+
+  const otherOrgId = await t.run(async ctx => ctx.db.insert("organizations", {
+    ownerId: admin.userId, name: "Outra Barbearia", isDemo: false,
+    inviteCode: "OUTRO-CONVITE-LOCAL",
+    businessHours: defaultBusinessHours(), settings: defaultSettings(),
+    salesCount: 0, createdAt: Date.now(), updatedAt: Date.now(),
+  }));
+  const currentPlan = await t.run(ctx => ctx.db.get(ids.planDraftId));
+  await expect(admin.caller.mutation(api.platformBilling.createLink, {
+    ...ids, organizationId: otherOrgId,
+    expectedPlanUpdatedAt: currentPlan!.updatedAt,
+    confirmedOrganizationName: "Outra Barbearia", reason,
+  })).rejects.toThrow(/já foi vinculada/i);
+  expect((await admin.caller.query(api.platformBilling.links, {})).items).toHaveLength(1);
+});
+
+test("não associa pagamentos recorrentes nem unidades com entitlement billing", async () => {
+  const admin = await account("admin@example.test");
+  vi.stubEnv("BARBER_PLATFORM_ADMIN_USER_ID", admin.userId);
+  vi.stubEnv("BARBER_PLATFORM_ADMIN_EMAIL", "admin@example.test");
+  enableSandbox();
+  const ids = await createData(admin.userId);
+  const args = {
+    ...ids, confirmedOrganizationName: "Barbearia Alfa",
+    reason: "Validação de assinatura recorrente bloqueada.",
+  };
+  await t.run(ctx => ctx.db.patch(ids.sourceInboxId, { subscriptionId: "sub_test123" }));
+  await expect(admin.caller.mutation(api.platformBilling.createLink, args))
+    .rejects.toThrow(/recorrentes/i);
+  await t.run(async ctx => {
+    await ctx.db.patch(ids.sourceInboxId, { subscriptionId: undefined });
+    const now = Date.now();
+    await ctx.db.insert("organizationEntitlements", {
+      organizationId: ids.organizationId,
+      plan: "pro", status: "active", source: "billing",
+      periodEndsAt: now + 30 * 86_400_000,
+      createdAt: now, updatedAt: now,
+    });
+  });
+  await expect(admin.caller.mutation(api.platformBilling.createLink, args))
+    .rejects.toThrow(/vínculo comercial operacional/i);
+});
+
 test("invalidação exige confirmação, preserva auditoria e impede reutilização de cobrança", async () => {
   const admin = await account("admin@example.test");
   vi.stubEnv("BARBER_PLATFORM_ADMIN_USER_ID", admin.userId);
