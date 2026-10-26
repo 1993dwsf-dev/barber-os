@@ -1,5 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { HttpError } from "./lib";
@@ -330,5 +330,79 @@ export const pilotTrialHistory = query({
       afterTrialEndsAt: event.afterTrialEndsAt ?? null,
       createdAt: event.createdAt,
     }));
+  },
+});
+
+
+/* ------------------------ Asaas sandbox / inbox only ------------------------ */
+
+/**
+ * A API de billing da fase 1 apenas recolhe eventos do SANDBOX;
+ * não existe associação evento->tenant, confirmação financeira ou grant de acesso.
+ */
+function sandboxWebhookEnabled(): boolean {
+  return process.env.BARBER_ASAAS_WEBHOOK_ENABLED === "true" &&
+    process.env.BARBER_ASAAS_ENV === "sandbox" &&
+    process.env.BARBER_BILLING_ENFORCED !== "true" &&
+    process.env.CONVEX_CLOUD_URL?.replace(/\/$/, "") ===
+      "https://unique-tortoise-387.convex.cloud";
+}
+
+/** Apenas chamadas servidor-servidor, nunca uma mutation pública de navegador. */
+export const recordAsaasSandboxEvent = internalMutation({
+  args: {
+    eventId: v.string(),
+    eventType: v.string(),
+    paymentId: v.string(),
+    subscriptionId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    if (!sandboxWebhookEnabled()) {
+      throw new HttpError("Inbox financeira desabilitada neste deployment.");
+    }
+    // Revalidar no backend; nem mesmo a action HTTP é uma origem de confiança.
+    if (!/^[a-zA-Z0-9_&-]{4,120}$/.test(args.eventId) ||
+        !/^[a-zA-Z0-9_&-]{4,120}$/.test(args.paymentId) ||
+        !/^PAYMENT_[A-Z_]{3,64}$/.test(args.eventType) ||
+        (args.subscriptionId !== undefined && !/^[a-zA-Z0-9_&-]{4,120}$/.test(args.subscriptionId))) {
+      throw new HttpError("Identificadores do evento inválidos.");
+    }
+    const previous = await ctx.db.query("billingWebhookInbox")
+      .withIndex("by_provider_event", q => q.eq("provider", "asaas").eq("eventId", args.eventId))
+      .unique();
+    if (previous) return { duplicate: true };
+
+    await ctx.db.insert("billingWebhookInbox", {
+      provider: "asaas",
+      environment: "sandbox",
+      eventId: args.eventId,
+      eventType: args.eventType,
+      paymentId: args.paymentId,
+      subscriptionId: args.subscriptionId,
+      receivedAt: Date.now(),
+    });
+    // Deliberadamente NÃO acessa organizationEntitlements.
+    return { duplicate: false };
+  },
+});
+
+/** Leitura administrativa limitada, sem valores, emails ou dados pessoais. */
+export const billingInbox = query({
+  args: {},
+  handler: async ctx => {
+    await requirePlatformAdmin(ctx);
+    const events = await ctx.db.query("billingWebhookInbox")
+      .withIndex("by_received").order("desc").take(30);
+    return {
+      enabled: sandboxWebhookEnabled(),
+      items: events.map(e => ({
+        id: e._id,
+        eventId: e.eventId,
+        eventType: e.eventType,
+        paymentId: e.paymentId,
+        subscriptionId: e.subscriptionId ?? null,
+        receivedAt: e.receivedAt,
+      })),
+    };
   },
 });

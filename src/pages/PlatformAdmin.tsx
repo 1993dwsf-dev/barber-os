@@ -59,6 +59,7 @@ export default function PlatformAdmin() {
     allowed === true && selectedOrg ? { organizationId: selectedOrg } : "skip",
   );
   const drafts = useQuery(api.platformAdmin.planDrafts, allowed === true ? {} : "skip");
+  const billingInbox = useQuery(api.platformAdmin.billingInbox, allowed === true ? {} : "skip");
   const savePlanDraft = useMutation(api.platformAdmin.savePlanDraft);
   const managePilotTrial = useMutation(api.platformAdmin.managePilotTrial);
   const trialHistory = useQuery(
@@ -551,6 +552,57 @@ export default function PlatformAdmin() {
               )}
             </div>
           </div>
+        </section>
+
+
+        <section className="glass rounded-2xl p-5" aria-label="Eventos de pagamento Sandbox">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">Eventos financeiros — ambiente de testes</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Caixa de entrada de notificações Asaas Sandbox. Eventos recebidos não representam
+                pagamentos conciliados ou assinaturas ativas.
+              </p>
+            </div>
+            <Badge variant="outline">
+              {billingInbox?.enabled ? "Recebimento de testes habilitado" : "Recebimento desabilitado"}
+            </Badge>
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Não há concessão ou suspensão automática de acesso nesta etapa.
+            A reconciliação financeira exige consulta autenticada à API do provedor.
+          </p>
+          {!billingInbox ? (
+            <p className="mt-4 text-sm text-muted-foreground">Carregando caixa de entrada…</p>
+          ) : billingInbox.items.length === 0 ? (
+            <p className="mt-4 text-sm text-muted-foreground">Nenhuma notificação financeira Sandbox recebida.</p>
+          ) : (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[560px] text-left text-sm">
+                <thead className="border-b border-border/60 text-xs text-muted-foreground">
+                  <tr>
+                    <th className="py-2 pr-3">Evento</th>
+                    <th className="py-2 pr-3">Pagamento (ID)</th>
+                    <th className="py-2 pr-3">Recebido em</th>
+                    <th className="py-2">Conciliação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {billingInbox.items.map(item => (
+                    <tr key={item.id} className="border-b border-border/40">
+                      <td className="py-2 pr-3 font-medium">{item.eventType}</td>
+                      <td className="max-w-44 break-all py-2 pr-3 font-mono text-xs">{item.paymentId}</td>
+                      <td className="py-2 pr-3">{new Date(item.receivedAt).toLocaleString("pt-BR")}</td>
+                      <td className="py-2"><Badge variant="outline">Não conciliado</Badge></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-3 text-xs text-muted-foreground">
+                Mostrando no máximo os 30 eventos mais recentes; nenhum dado de comprador é armazenado.
+              </p>
+            </div>
+          )}
         </section>
 
         <p className="pb-4 text-xs leading-relaxed text-muted-foreground">
