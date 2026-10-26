@@ -8,8 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
+  buildAdminUnitsCsv, countTrialWindows, trialWindow,
+} from "@/lib/platform-admin-report";
+import {
   Building2, CalendarDays, ChevronLeft, ClipboardList, LockKeyhole,
   LogOut, Search, ShieldCheck, Store, Users, Eye, Pencil, Save, Tag, PauseCircle,
+  Download, AlertTriangle, Clock3,
 } from "lucide-react";
 
 const TRIAL_ACTION_LABELS: Record<string, string> = {
@@ -168,15 +172,36 @@ export default function PlatformAdmin() {
   const { signOut } = useAuth();
   const navigate = useNavigate();
 
+  const now = overview?.generatedAt ?? Date.now();
+  const trialCounts = useMemo(() =>
+    countTrialWindows(overview?.organizations ?? [], now), [overview, now]);
+
   const filtered = useMemo(() => {
     const orgs = overview?.organizations ?? [];
     return orgs.filter(o => {
       if (filter === "demo" && !o.isDemo) return false;
       if (filter === "test" && o.status !== "trialing") return false;
       if (filter === "unconfigured" && o.status !== "unconfigured") return false;
+      if (filter === "due_soon" && trialWindow(o, now) !== "due_soon") return false;
+      if (filter === "expired" && trialWindow(o, now) !== "expired") return false;
+      if (filter === "missing_deadline" && trialWindow(o, now) !== "missing_deadline") return false;
       return o.name.toLocaleLowerCase("pt-BR").includes(term.trim().toLocaleLowerCase("pt-BR"));
     });
-  }, [overview, term, filter]);
+  }, [overview, now, term, filter]);
+
+  function exportFilteredCsv() {
+    if (!overview || !filtered.length) return;
+    const csv = buildAdminUnitsCsv(filtered, now);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `barber-os-admin-unidades-${new Date(now).toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
 
   if (allowed === undefined) {
     return <main className="mx-auto max-w-5xl p-8 text-sm text-muted-foreground">Verificando acesso administrativo…</main>;
@@ -224,12 +249,14 @@ export default function PlatformAdmin() {
           </div>
         </header>
 
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Indicadores de unidades">
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Indicadores de unidades">
           {[
             { label: "Unidades exibidas", value: overview.summary.organizationsShown, icon: Building2 },
             { label: "Demonstração", value: overview.summary.demoShown, icon: Store },
             { label: "Em teste", value: overview.summary.trialsShown, icon: CalendarDays },
             { label: "Sem plano", value: overview.summary.unitsWithoutEntitlement, icon: ClipboardList },
+            { label: "Testes vencendo em 7 dias", value: trialCounts.dueSoon, icon: Clock3 },
+            { label: "Testes com prazo expirado", value: trialCounts.expired, icon: AlertTriangle },
           ].map(item => (
             <div key={item.label} className="glass rounded-2xl p-5">
               <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
@@ -245,12 +272,18 @@ export default function PlatformAdmin() {
             <div>
               <h2 className="text-lg font-semibold">Unidades cadastradas</h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Listagem restrita às {overview.maxRows} unidades mais recentes, por desempenho e privacidade.
+                Listagem e indicadores limitados às {overview.maxRows} unidades mais recentes — não representam o total da plataforma.
               </p>
             </div>
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Users className="size-3.5" /> Sem dados de clientes ou funcionários
-            </span>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Users className="size-3.5" /> Sem dados de clientes ou funcionários
+              </span>
+              <Button type="button" size="sm" variant="outline"
+                disabled={filtered.length === 0} onClick={exportFilteredCsv}>
+                <Download className="size-4" /> Exportar CSV ({filtered.length})
+              </Button>
+            </div>
           </div>
 
           {overview.hasMore && (
@@ -280,8 +313,16 @@ export default function PlatformAdmin() {
               <option value="demo">Demonstração</option>
               <option value="test">Em teste</option>
               <option value="unconfigured">Sem plano</option>
+              <option value="due_soon">Teste vence em até 7 dias</option>
+              <option value="expired">Prazo de teste expirado</option>
+              <option value="missing_deadline">Teste sem vencimento</option>
             </select>
           </div>
+
+          <p className="mt-2 text-xs text-muted-foreground">
+            O CSV inclui somente as {filtered.length} unidades visíveis após os filtros.
+            Não inclui clientes, equipe, faturamento ou dados além das {overview.maxRows} unidades autorizadas.
+          </p>
 
           {filtered.length === 0 ? (
             <p className="py-10 text-center text-sm text-muted-foreground">Nenhuma unidade encontrada nesta página.</p>
@@ -303,6 +344,12 @@ export default function PlatformAdmin() {
                     <Badge variant="secondary">{STATUS[o.status] ?? o.status}</Badge>
                     {o.plan && <Badge variant="outline">Plano: {o.plan}</Badge>}
                     {o.status === "trialing" && <span className="text-xs text-muted-foreground">Até {fmt(o.trialEndsAt)}</span>}
+                    {trialWindow(o, now) === "due_soon" &&
+                      <Badge variant="outline">Vence em 7 dias</Badge>}
+                    {trialWindow(o, now) === "expired" &&
+                      <Badge variant="destructive">Prazo expirado</Badge>}
+                    {trialWindow(o, now) === "missing_deadline" &&
+                      <Badge variant="outline">Sem data de término</Badge>}
                     <Button type="button" size="sm" variant="outline" onClick={() => selectOrganization(o.id)}>
                       <Eye className="size-3.5" /> Detalhes
                     </Button>
@@ -509,7 +556,8 @@ export default function PlatformAdmin() {
         <p className="pb-4 text-xs leading-relaxed text-muted-foreground">
           Painel técnico de homologação. Status de plano são registros do backend;
           não representam pagamentos confirmados, receita da plataforma ou assinaturas comerciais.
-          O catálogo aceita rascunhos; o gestor de testes só opera com autorização adicional do servidor.\n          Não há cobrança, pagamentos confirmados ou suporte remoto nesta versão.
+          O catálogo aceita rascunhos; o gestor de testes só opera com autorização adicional do servidor.
+          Não há cobrança, pagamentos confirmados ou suporte remoto nesta versão.
         </p>
       </div>
     </main>
