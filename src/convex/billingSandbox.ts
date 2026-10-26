@@ -15,7 +15,12 @@ const VALID_STATUS = /^[A-Z_]{3,48}$/;
  */
 export const checkPaymentStatus = action({
   args: { inboxId: v.id("billingWebhookInbox") },
-  handler: async (ctx, { inboxId }) => {
+  handler: async (ctx, { inboxId }): Promise<{
+    paymentId: string;
+    status: string;
+    checkedAt: number;
+    environment: "sandbox";
+  }> => {
     // Require both private flags AND the intended Convex development deployment.
     if (process.env.BARBER_ASAAS_LOOKUP_ENABLED !== "true" ||
         process.env.BARBER_ASAAS_ENV !== "sandbox" ||
@@ -25,7 +30,7 @@ export const checkPaymentStatus = action({
     }
 
     // Query through current authenticated caller. A tenant owner is NOT an admin.
-    const allowed = await ctx.runQuery(api.platformAdmin.access, {});
+    const allowed: boolean = await ctx.runQuery(api.platformAdmin.access, {});
     if (allowed !== true) throw new HttpError("Acesso restrito à administração da plataforma.");
 
     const key = process.env.BARBER_ASAAS_API_KEY?.trim();
@@ -34,7 +39,8 @@ export const checkPaymentStatus = action({
     }
 
     // ID of an already-stored webhook record, never an arbitrary external URL.
-    const event = await ctx.runQuery(internal.platformAdmin.billingInboxPaymentForLookup, { id: inboxId });
+    const event: { paymentId: string; eventId: string } | null =
+      await ctx.runQuery(internal.platformAdmin.billingInboxPaymentForLookup, { id: inboxId });
     if (!event || !PAYMENT_ID.test(event.paymentId)) {
       throw new HttpError("Evento Sandbox não encontrado.");
     }
