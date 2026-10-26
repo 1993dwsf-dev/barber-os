@@ -743,6 +743,7 @@ const schema = defineSchema(
       voidedAt: v.optional(v.number()),
     })
       .index("by_org", ["organizationId"])
+      .index("by_org_status", ["organizationId", "status"])
       .index("by_created", ["createdAt"])
       .index("by_reference", ["externalReference"])
       .index("by_payment", ["paymentId"]),
