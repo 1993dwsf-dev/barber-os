@@ -206,10 +206,13 @@ describe("verificação manual de pagamento Sandbox — somente leitura", () => 
     await t.mutation(internal.platformAdmin.recordAsaasSandboxEvent, event);
     const inbox = await admin.caller.query(api.platformAdmin.billingInbox, {});
     expect(inbox.lookupEnabled).toBe(true);
-    const mockFetch = vi.fn(async (_url: unknown, _options: unknown) =>
-      new Response(JSON.stringify({ status: "RECEIVED", cpfCnpj: "00000000000" }), {
+    const mockFetch = vi.fn(async (url: unknown, options: unknown) => {
+      expect(url).toBe("https://api-sandbox.asaas.com/v3/payments/pay_080225913252/status");
+      expect(options).toBeDefined();
+      return new Response(JSON.stringify({ status: "RECEIVED", cpfCnpj: "00000000000" }), {
         status: 200, headers: { "content-type": "application/json" },
-      }));
+      });
+    });
     vi.stubGlobal("fetch", mockFetch);
 
     const result = await admin.caller.action(api.billingSandbox.checkPaymentStatus, {
