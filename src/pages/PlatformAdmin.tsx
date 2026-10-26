@@ -172,7 +172,7 @@ export default function PlatformAdmin() {
   const { signOut } = useAuth();
   const navigate = useNavigate();
 
-  const now = overview?.generatedAt ?? Date.now();
+  const now = overview?.generatedAt ?? 0;
   const trialCounts = useMemo(() =>
     countTrialWindows(overview?.organizations ?? [], now), [overview, now]);
 
