@@ -117,7 +117,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
             </span>
             <span>
               <span className="block text-base font-semibold tracking-tight text-foreground">
-                BarberFlow <span className="text-primary">OS</span>
+                Barber <span className="text-primary">OS</span>
               </span>
               <span className="block text-[11px] text-muted-foreground">
                 Sistema operacional para barbearias
