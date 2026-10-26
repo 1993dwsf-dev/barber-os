@@ -31,7 +31,7 @@ function Privacy() {
     <>
       <Section title="1. Quem trata seus dados">
         <p>
-          O BarberFlow OS é operado pela barbearia que utiliza a plataforma (a “Controladora”). A
+          O Barber OS é operado pela barbearia que utiliza a plataforma (a “Controladora”). A
           plataforma atua como operadora: guarda e processa os dados seguindo as instruções da
           barbearia, conforme a Lei nº 13.709/2018 (LGPD).
         </p>
@@ -124,7 +124,7 @@ function Terms() {
     <>
       <Section title="1. Objeto">
         <p>
-          Estes Termos regulam o uso do BarberFlow OS, sistema de gestão para barbearias
+          Estes Termos regulam o uso do Barber OS, sistema de gestão para barbearias
           (agenda, atendimentos, vendas, caixa, estoque, fidelidade, assinaturas e relatórios).
         </p>
       </Section>
@@ -197,7 +197,7 @@ export default function Legal() {
             ← Voltar ao site
           </Link>
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary/70">
-            BarberFlow OS
+            Barber OS
           </p>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">
             {isPrivacy ? "Política de Privacidade" : "Termos de Uso"}
