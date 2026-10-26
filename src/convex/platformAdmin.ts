@@ -3,6 +3,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { v } from "convex/values";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { HttpError } from "./lib";
+import { sandboxLookupChecks, sandboxLookupAllowed } from "../lib/asaas-lookup-config";
 
 /**
  * Administração da plataforma (não da barbearia).
@@ -395,12 +396,8 @@ export const billingInbox = query({
       .withIndex("by_received").order("desc").take(30);
     return {
       enabled: sandboxWebhookEnabled(),
-      lookupEnabled: process.env.BARBER_ASAAS_LOOKUP_ENABLED === "true" &&
-        process.env.BARBER_ASAAS_ENV === "sandbox" &&
-        process.env.BARBER_BILLING_ENFORCED !== "true" &&
-        process.env.CONVEX_CLOUD_URL?.replace(/\/$/, "") ===
-          "https://unique-tortoise-387.convex.cloud" &&
-        Boolean(process.env.BARBER_ASAAS_API_KEY?.trim()),
+      lookupEnabled: sandboxLookupAllowed(),
+      lookupChecks: sandboxLookupChecks(),
       items: events.map(e => ({
         id: e._id,
         eventId: e.eventId,

@@ -598,11 +598,23 @@ export default function PlatformAdmin() {
             <div id="asaas-lookup-disabled-help" role="status" className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
               <p className="font-semibold">Consulta de status desabilitada no servidor</p>
               <p className="mt-1">
-                O botão ficará indisponível até confirmar as variáveis privadas do Convex Development
-                (unique-tortoise-387): BARBER_ASAAS_ENV=sandbox,
-                BARBER_ASAAS_LOOKUP_ENABLED=true e BARBER_ASAAS_API_KEY com a chave
-                da API do Asaas Sandbox. BARBER_BILLING_ENFORCED não pode estar habilitada.
+                Verificação individual das configurações privadas no Convex Development:
               </p>
+              <ul className="mt-2 space-y-1" aria-label="Diagnóstico da consulta Asaas">
+                {[
+                  { label: "Ambiente Sandbox selecionado", ok: billingInbox.lookupChecks.sandboxSelected },
+                  { label: "BARBER_ASAAS_LOOKUP_ENABLED=true", ok: billingInbox.lookupChecks.lookupEnabledFlag },
+                  { label: "Controle comercial não forçado", ok: billingInbox.lookupChecks.billingSafelyDisabled },
+                  { label: "Deployment correto: unique-tortoise-387", ok: billingInbox.lookupChecks.developmentDeployment },
+                  { label: "BARBER_ASAAS_API_KEY cadastrada no Convex", ok: billingInbox.lookupChecks.apiKeyConfigured },
+                  { label: "Formato da chave válido (mínimo de 20 caracteres, sem espaços)", ok: billingInbox.lookupChecks.apiKeyValidFormat },
+                ].map(check => (
+                  <li key={check.label} className="flex gap-2">
+                    <span aria-hidden="true">{check.ok ? "✓" : "✕"}</span>
+                    <span>{check.label}: <strong>{check.ok ? "OK" : "Pendente"}</strong></span>
+                  </li>
+                ))}
+              </ul>
               <p className="mt-1 text-xs text-muted-foreground">
                 O token de autenticação do webhook não substitui a chave de API.
                 Nunca configure esses segredos no navegador, Cloudflare Pages ou repositório.
