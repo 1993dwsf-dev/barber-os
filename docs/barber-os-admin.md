@@ -116,3 +116,8 @@ A configuração `BARBER_AUTH_COMMERCIAL_ENABLED` ou `BARBER_BILLING_ENFORCED` d
 7. Desabilitar a flag depois do teste, se não houver operação administrativa em curso. Revalidar conta não autorizada.
 
 O desenho suporta pilotos. **Suspensão de clientes pagantes, reativação comercial e conexão de cobrança exigem integração específica com o provedor de pagamentos, política contratual e idempotência; não estão incluídas.**
+
+
+### Ajuste de usabilidade — formulário de gestão de testes
+
+A interface apresenta agora contador da justificativa (mínimo 12, máximo 350 caracteres), aviso contextual quando os campos ainda não autorizam o envio, validação de dias inteiros entre 1 e 30 e histórico com verbos legíveis em português. O botão continua bloqueado até todos os requisitos serem atendidos; a validação real permanece no servidor. Essa alteração é **somente frontend**: não exige um novo deploy do Convex e não altera cobrança, acesso ou dados.
