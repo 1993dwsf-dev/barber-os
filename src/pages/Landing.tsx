@@ -56,7 +56,7 @@ const MODULES: { icon: LucideIcon; title: string; text: string }[] = [
   {
     icon: BarChart3,
     title: "Financeiro e comissões",
-    text: "Caixa, despesas, fluxo de caixa e comissão da equipe approve por período.",
+    text: "Caixa, despesas, fluxo de caixa e comissão da equipe por período.",
   },
 ];
 
@@ -108,7 +108,7 @@ export default function Landing() {
             </span>
             <span className="leading-tight">
               <span className="block text-sm font-semibold tracking-tight text-foreground">
-                BarberFlow <span className="text-primary">OS</span>
+                Barber <span className="text-primary">OS</span>
               </span>
               <span className="hidden text-[11px] text-muted-foreground sm:block">
                 Sistema operacional para barbearias
@@ -374,7 +374,7 @@ export default function Landing() {
                 Sua barbearia merece um sistema, não uma planilha
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground">
-                Comece com o ambiente demo e conheça o BarberFlow OS com dados de uma
+                Comece com o ambiente demo e conheça o Barber OS com dados de uma
                 barbearia fictícia, ou crie a sua unidade em menos de dois minutos.
               </p>
               <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -412,8 +412,8 @@ export default function Landing() {
 
       <footer className="relative z-10 border-t px-4 py-8 sm:px-6">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 text-xs text-muted-foreground sm:flex-row">
-          <p>© {new Date().getFullYear()} BarberFlow OS — feito para barbearias.</p>
-          <p>Valores em reais (BRL) · datas DD/MM/AAAA · PIX e WhatsApp integrados.</p>
+          <p>© {new Date().getFullYear()} Barber OS — feito para barbearias.</p>
+          <p>Valores em reais (BRL) · datas DD/MM/AAAA · agendamento, vendas e caixa integrados.</p>
           <p className="flex items-center gap-4">
             <Link to="/privacidade" className="transition-colors hover:text-foreground">
               Privacidade
