@@ -1,11 +1,11 @@
-# Barber OS Admin — painel interno v1 (homologação)
+# Barber OS Admin — homologação (v1 leitura, v2 catálogo, v3 pilotos)
 
 ## Finalidade
 
-Primeira versão da central **do operador da plataforma**, não do proprietário de uma barbearia.
+Central **do operador da plataforma**, não do proprietário de uma barbearia. A descrição abaixo registra a versão original (v1); as novas capacidades constam das seções posteriores.
 Rota: `/admin`. Exibe **somente leitura** sobre unidades cadastradas, seu caráter de demonstração e eventual estado de plano/piloto **registrado no banco**. Não exibe cadastro de clientes, faturamento interno, informações pessoais de funcionários, convites comerciais, chaves, nem números de receita do negócio SaaS.
 
-Este **não** é um sistema comercial nem de assinatura. O modelo de `organizationEntitlements` é infraestrutura preparatória e não comprova pagamentos efetuados. A lista é limitada às **75 organizações mais recentes** e os contadores mostram **somente essas 75**, com aviso se houver mais.
+A v1 **não** era um sistema comercial nem de assinatura. O modelo de `organizationEntitlements` é infraestrutura preparatória e não comprova pagamentos efetuados. A lista é limitada às **75 organizações mais recentes** e os contadores mostram **somente essas 75**, com aviso se houver mais.
 
 ## Como habilitar sem abrir o sistema para terceiros
 
@@ -23,7 +23,7 @@ O controle exige **os dois valores simultaneamente**, sessão real de usuário, 
 
 **Para revogar**: remova qualquer uma das duas variáveis do Convex. Isso não altera a conta nem suas barbearias, apenas impede as consultas globais. Não reutilize permissões administrativas de unidade para conceder acesso à plataforma.
 
-## O que esta versão faz
+## O que a versão 1 faz
 
 - Tela isolada e não dependente de uma barbearia selecionada.
 - Lista limitada às 75 unidades mais recentes com nome comercial e data de criação.
@@ -33,7 +33,7 @@ O controle exige **os dois valores simultaneamente**, sessão real de usuário, 
 - Link de navegação visível apenas para a conta autorizada.
 - Backend com consultas apenas de leitura e controle server-side; testes de negação de acesso para contas externas e para ambiente sem configuração.
 
-## O que NÃO faz (não confundir com gestão comercial)
+## O que a versão 1 NÃO faz (histórico)
 
 - Criar, editar, suspender ou excluir barbearias/usuários.
 - Acessar agendas, clientes, dados financeiros ou contratos de cada unidade.
@@ -72,3 +72,47 @@ Limites: até 100 rascunhos; a listagem do catálogo exibe no máximo 100. A lis
 3. Criar e editar rascunho com conta autorizada; confirmar eventos em `platformAdminAuditLogs`.
 4. Verificar que `organizationEntitlements` não sofreu alterações.
 5. Somente após aprovação do PR, publicar `bunx convex dev --once` no deployment Development `barber-os-homologacao`, nunca em produção.
+
+## Etapa v3 — Gestão manual de pilotos e testes (PR em revisão)
+
+Ações no menu de detalhes de uma unidade não-demo:
+- **Iniciar teste** quando a unidade ainda não possui `organizationEntitlements`.
+- **Prorrogar teste** se o registro atual está em `trialing` e sua origem é `pilot`.
+- **Suspender teste** se está em `trialing`, preservando a data registrada.
+- **Reativar teste** somente se estiver suspenso e for originado de `pilot`, com novo prazo definido.
+
+**Não é gestão de pagamentos.** Não converte ninguém em assinante pagante, não escreve `status="active"`, não cria cobranças, não permite editar registros `source="billing"` e não habilita o controle comercial automaticamente.
+
+**Barreira extra:** a mutação falha de forma segura por padrão. Para permitir operações exclusivamente no projeto Convex **Development de homologação**, configurar no deployment privado:
+
+```text
+BARBER_PLATFORM_TRIAL_ADMIN_WRITES=true
+```
+
+Não incluir essa chave em `.env.local` versionado, Cloudflare Pages ou variáveis `VITE_*`. Manter a chave ausente em produção. Para revogar, apagar a variável ou definir `false`. Se `BARBER_BILLING_ENFORCED=true`, as operações manuais são desabilitadas independentemente da flag.
+
+### Proteções técnicas
+
+- A mesma autenticação administrativa reforçada (ID de usuário e e-mail verificado) é exigida novamente **no backend** para cada consulta e mutação.
+- Confirmação literal do **nome da unidade**, justificativa de **12 a 350 caracteres** e limite de **1 a 30 dias** por operação.
+- Limite superior de 90 dias para a data final do teste contados do momento da operação.
+- Verificação otimista por **ID e versão do entitlement** para não sobrescrever modificações concorrentes.
+- Bloqueio de unidades em demonstração, de assinaturas `billing` e de operações incompatíveis com o status.
+- Cada alteração gera evento em `platformAdminAuditLogs` com estado anterior/posterior e justificativa. A UI consulta os **20 eventos mais recentes** por unidade.
+- Nenhuma leitura da tabela `clients`, `sales`, equipe, credenciais ou financeiro da unidade.
+
+### Cuidado: aplicação efetiva do status
+
+A configuração `BARBER_AUTH_COMMERCIAL_ENABLED` ou `BARBER_BILLING_ENFORCED` define se os registros de acesso controlam **escritas** das barbearias. Na homologação atual, esses controles podem estar desligados; nesse caso, **suspender muda o estado no banco, mas não bloqueia edição na unidade**. Não habilitar os controles de acesso comercial apenas para testar a interface v3; planejar validação isolada antes.
+
+### Ordem de implantação
+
+1. Revisar CI completo e não alterar `main`.
+2. Na branch do PR, confirmar `CONVEX_DEPLOYMENT=dev:unique-tortoise-387` vinculado ao projeto `barber-os-homologacao`.
+3. Rodar `bunx convex dev --once` para publicar **somente nesse deployment Development**, antes de integrar à `staging`. Nunca usar `convex deploy` neste fluxo.
+4. Após atualizar o backend, integrar PR à `staging`, permitindo ao Cloudflare publicar o frontend.
+5. Validar leitura do painel com a flag desligada (operações indisponíveis).
+6. Se for autorizado testar alterações reais em registros fictícios, habilitar `BARBER_PLATFORM_TRIAL_ADMIN_WRITES=true` **no Convex Development** e testar iniciar, prorrogar, suspender e reativar. Conferir eventos em `platformAdminAuditLogs`.
+7. Desabilitar a flag depois do teste, se não houver operação administrativa em curso. Revalidar conta não autorizada.
+
+O desenho suporta pilotos. **Suspensão de clientes pagantes, reativação comercial e conexão de cobrança exigem integração específica com o provedor de pagamentos, política contratual e idempotência; não estão incluídas.**
