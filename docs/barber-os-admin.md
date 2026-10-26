@@ -271,3 +271,31 @@ Referência do Asaas: [Recuperar uma única cobrança](https://docs.asaas.com/re
 ### Exportação CSV da associação Sandbox
 
 O Admin oferece `Exportar CSV` contendo apenas os até 50 vínculos recentes atualmente retornados pela API global administrativa. Usa UTF-8 com BOM, separador `;`, aspas escapadas, proteção contra **formula injection** no Excel e datas ISO. O arquivo inclui barbearia, ID da cobrança Sandbox, rascunho do plano, preço previsto e situação administrativa, com aviso explícito de que **não comprova receita nem concede acesso**. Nenhum dado de cliente Asaas, CPF ou token aparece.
+
+
+## Etapa v8 — emissão rastreável de cobrança, exclusivamente no Asaas Sandbox
+
+Infraestrutura de backend pronta para pedidos de cobrança **originados dentro do Barber OS**, identificados por uma referência única `barber_sbx_<ID do pedido>`. Esta etapa **não disponibiliza ainda um formulário de emissão**, não move dinheiro real e não altera `organizationEntitlements`. O webhook e os vínculos administrativos v7 permanecem independentes.
+
+### Fluxo projetado
+1. **Preparar pedido (mutation admin-only):** selecionar unidade não demo, rascunho de plano, ID de cliente Asaas Sandbox já existente, tipo `PIX` ou `BOLETO`, vencimento até 45 dias, nome literal da barbearia, justificativa e versão do plano. Gravar snapshot do preço e do nome do plano.
+2. **Enviar cobrança (action admin-only):** exige `BARBER_ASAAS_ORDER_WRITES=true`, `BARBER_ASAAS_LOOKUP_ENABLED=true`, `BARBER_ASAAS_ENV=sandbox`, deployment `unique-tortoise-387`, `BARBER_BILLING_ENFORCED` desligada e chave privada válida.
+3. **Antes de criar**, reservar pedido transacionalmente em `sending` e consultar `GET /v3/payments?externalReference=<referência>`. Se já existir cobrança, **não enviar POST**. Se não existir, enviar exatamente **uma** chamada `POST https://api-sandbox.asaas.com/v3/payments`, com `customer`, `billingType`, `value`, `dueDate`, `externalReference` e descrição mínima.
+4. **Confirmar resposta:** conferir ID, referência externa, cliente, valor, forma de pagamento e vencimento. Persistir apenas ID da cobrança e estado `created`, sem dados pessoais.
+5. **Em caso de timeout, falha HTTP, inconsistência ou resultado inconclusivo:** marcar o pedido `uncertain`. É proibido repetir o POST. A operação de recuperação **somente GET** usa `externalReference`, verifica novamente todos os campos e registra o pagamento se houver correspondência única. Se não houver, permanece incerto para revisão humana.
+6. **Cancelar um rascunho antes do envio:** operação admin exige confirmação nominal e justificativa, preservando auditoria. Pedidos `sending`, `created` ou `uncertain` não podem ser cancelados automaticamente, para evitar cobranças órfãs.
+
+### Proteções / limitações intencionais
+- Ações não disponíveis a proprietários de barbearias; exigem as duas variáveis do admin e e-mail verificado.
+- Somente `api-sandbox.asaas.com`, com endpoint de produção ausente no código. API key somente no backend.
+- Cada pedido traz referência vinculada ao ID Convex do próprio pedido. Uma barbearia não pode ter mais de um pedido aberto ou incerto simultaneamente.
+- Valores congelados em centavos e comparados exatamente com a resposta do Asaas. Nenhum CPF/nome/endereço de pagador é armazenado.
+- A API do Asaas recebe um ID de cliente **já cadastrado no Sandbox**; criação/deduplicação de clientes e UX de emissão ainda são etapas posteriores.
+- Não criar tentativas automáticas após timeout. A consulta por `externalReference` não equivale à idempotência assegurada pelo provedor; em situações inconclusivas, é obrigatório reconciliar manualmente antes de qualquer novo pedido.
+- Não há confirmação de pagamento, reconhecimento de receita ou autorização de acesso apenas por emitir uma cobrança. O eventual vínculo entre cliente Asaas, representante da barbearia e contrato precisa ser validado separadamente.
+- Não habilitar em produção, não usar dados reais de compradores, não rodar `convex deploy`.
+
+### Flag privada para testes futuros
+`BARBER_ASAAS_ORDER_WRITES=false` por padrão. Não habilite sem intenção de emitir uma cobrança **fictícia no Sandbox**. Como ainda não há botão de emissão, nenhuma ação é disparada automaticamente.
+
+**Referências oficiais:** [Criar cobrança](https://docs.asaas.com/reference/criar-nova-cobranca), [Listar cobranças por referência externa](https://docs.asaas.com/reference/listar-cobrancas), [Cadastro de clientes](https://docs.asaas.com/docs/criando-um-cliente).
