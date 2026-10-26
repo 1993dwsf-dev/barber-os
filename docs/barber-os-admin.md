@@ -53,3 +53,22 @@ O controle exige **os dois valores simultaneamente**, sessão real de usuário, 
 **Não habilitar `BARBER_AUTH_COMMERCIAL_ENABLED=true`, `BARBER_BILLING_ENFORCED=true` nem remover `BARBER_STAGING_EMAIL` na homologação. Não colocar dados reais nesta base e não alterar a `main`.**
 
 Quando chegar a etapa comercial, discutir autenticação administrativa separada, 2FA forte, gestão de incidentes, trilhas de consulta globais, paginação server-side, monitoramento e administração de assinaturas em ambiente novo, com revisão LGPD apropriada.
+
+
+## Etapa v2 — detalhes operacionais e rascunhos de planos (branch de revisão)
+
+Esta etapa amplia o painel com:
+- **Detalhes por barbearia**: nome, status de acesso, plano operacional registrado, origem do acesso, datas de cadastro/atualização e vencimentos. Não inclui dados de clientes, funcionários, contatos privados, códigos de convite nem finanças da unidade.
+- **Catálogo comercial em rascunho**: nome, descrição e mensalidade estimada em centavos de real, com criação e edição restritas ao administrador global.
+- **Auditoria independente**: registros de criação/edição na tabela `platformAdminAuditLogs`, sem misturar eventos com `auditLogs` das barbearias.
+- **Separação explícita**: os rascunhos `platformPlanDrafts` não são os planos internos `membershipPlans` e não alteram `organizationEntitlements`. Não geram pagamentos, cobranças, permissões, suspensão ou ativação.
+
+Limites: até 100 rascunhos; a listagem do catálogo exibe no máximo 100. A lista de barbearias permanece limitada às 75 mais recentes. O preço informado é um valor **planejado**, não uma cobrança ativa. A validação de autorização e de valores ocorre no servidor, independentemente da interface.
+
+### Checklist para revisão antes de integrar à staging
+
+1. Rodar `bun install --frozen-lockfile`, `bun run test:backend`, `bun run build` e `bun run lint` no Codespaces.
+2. Conferir que uma conta não autorizada não lê detalhes nem rascunhos e não consegue criar/editar planos.
+3. Criar e editar rascunho com conta autorizada; confirmar eventos em `platformAdminAuditLogs`.
+4. Verificar que `organizationEntitlements` não sofreu alterações.
+5. Somente após aprovação do PR, publicar `bunx convex dev --once` no deployment Development `barber-os-homologacao`, nunca em produção.
