@@ -1,7 +1,7 @@
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -51,11 +51,11 @@ export default function PlatformAdmin() {
     setPlanMessage("");
   }
 
-  async function submitPlan(e: React.FormEvent<HTMLFormElement>) {
+  async function submitPlan(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (savingPlan) return;
     const price = planPrice.trim().replace(",", ".");
-    if (!/^\\d{1,7}(\\.\\d{1,2})?$/.test(price)) {
+    if (!/^\d{1,7}(\.\d{1,2})?$/.test(price)) {
       setPlanMessage("Informe a mensalidade em reais, com até duas casas decimais.");
       return;
     }
