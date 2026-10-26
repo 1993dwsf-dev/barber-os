@@ -87,9 +87,12 @@ export const prepareOrder = mutation({
     if (reason.length < 12 || reason.length > 350) {
       throw new HttpError("Justificativa deve ter de 12 a 350 caracteres.");
     }
-    const active = await ctx.db.query("sandboxBillingOrders")
-      .withIndex("by_org", q => q.eq("organizationId", org._id)).take(50);
-    if (active.some(x => x.status === "draft" || x.status === "sending" || x.status === "uncertain")) {
+    const active = await Promise.all((["draft", "sending", "uncertain"] as const).map(status =>
+      ctx.db.query("sandboxBillingOrders")
+        .withIndex("by_org_status", q => q.eq("organizationId", org._id).eq("status", status))
+        .first(),
+    ));
+    if (active.some(Boolean)) {
       throw new HttpError("Já existe pedido aberto ou de resultado incerto nesta barbearia.");
     }
     const now = Date.now();
