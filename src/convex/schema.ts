@@ -680,6 +680,22 @@ const schema = defineSchema(
       .index("by_created", ["createdAt"])
       .index("by_record", ["recordType", "recordId", "createdAt"]),
 
+    /* ---------------------- caixa de entrada de eventos financeiros ---------------------- */
+
+    // Eventos do Asaas SANDBOX, mínimos e isolados, sem dados de compradores.
+    // O recebimento NÃO equivale a pagamento conciliado nem muda permissões.
+    billingWebhookInbox: defineTable({
+      provider: v.literal("asaas"),
+      environment: v.literal("sandbox"),
+      eventId: v.string(),
+      eventType: v.string(),
+      paymentId: v.string(),
+      subscriptionId: v.optional(v.string()),
+      receivedAt: v.number(),
+    })
+      .index("by_provider_event", ["provider", "eventId"])
+      .index("by_received", ["receivedAt"]),
+
     /* ------------------------------ limites de uso / abuso ------------------------------ */
 
     // Janela deslizante de tentativas por usuário e ação. Usado para barrar
