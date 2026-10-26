@@ -1,5 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { HttpError } from "./lib";
@@ -404,5 +404,20 @@ export const billingInbox = query({
         receivedAt: e.receivedAt,
       })),
     };
+  },
+});
+
+
+/** Busca mínima de evento para verificação externa somente leitura.
+ * Esta query é interna: somente actions do backend a acessam.
+ */
+export const billingInboxPaymentForLookup = internalQuery({
+  args: { id: v.id("billingWebhookInbox") },
+  handler: async (ctx, { id }) => {
+    const record = await ctx.db.get(id);
+    if (!record || record.provider !== "asaas" || record.environment !== "sandbox") {
+      return null;
+    }
+    return { paymentId: record.paymentId, eventId: record.eventId };
   },
 });
