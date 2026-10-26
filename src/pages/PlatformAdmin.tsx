@@ -13,6 +13,7 @@ import {
 import {
   groupSandboxPaymentEvents, SANDBOX_EVENT_LABELS,
 } from "@/lib/asaas-payment-groups";
+import { sandboxLinksCsv } from "@/lib/asaas-link-csv";
 import {
   Building2, CalendarDays, ChevronLeft, ClipboardList, LockKeyhole,
   LogOut, Search, ShieldCheck, Store, Users, Eye, Pencil, Save, Tag, PauseCircle,
@@ -73,6 +74,129 @@ export default function PlatformAdmin() {
     Record<string, { status: string; checkedAt: number }>
   >({});
   const [paymentCheckError, setPaymentCheckError] = useState("");
+  const billingLinks = useQuery(api.platformBilling.links, allowed === true ? {} : "skip");
+  const createBillingLink = useMutation(api.platformBilling.createLink);
+  const voidBillingLink = useMutation(api.platformBilling.voidLink);
+  const reviewBillingLink = useAction(api.billingReconciliation.reviewLink);
+  const [linkUnitId, setLinkUnitId] = useState("");
+  const [linkPlanId, setLinkPlanId] = useState("");
+  const [linkEventId, setLinkEventId] = useState("");
+  const [linkName, setLinkName] = useState("");
+  const [linkReason, setLinkReason] = useState("");
+  const [linkSaving, setLinkSaving] = useState(false);
+  const [linkMessage, setLinkMessage] = useState("");
+  const [voidTargetId, setVoidTargetId] = useState<string | null>(null);
+  const [voidName, setVoidName] = useState("");
+  const [voidReason, setVoidReason] = useState("");
+  const [voidSaving, setVoidSaving] = useState(false);
+  const [reviewingLinkId, setReviewingLinkId] = useState<string | null>(null);
+  const [linkReviews, setLinkReviews] = useState<Record<string, {
+    status: string;
+    amountMatches: boolean;
+    paidStatus: boolean;
+    cashRecordedOutsideAsaas: boolean;
+    receivedAmountCents: number;
+    expectedAmountCents: number;
+    checkedAt: number;
+  }>>({});
+  const [linkReviewError, setLinkReviewError] = useState("");
+
+  const selectedLinkUnit = overview?.organizations.find(org => org.id === linkUnitId);
+  const selectedLinkPlan = drafts?.find(plan => plan._id === linkPlanId);
+  const selectedLinkEvent = paymentGroups.find(group => group.latest.id === linkEventId);
+  const linkedPayments = new Set(billingLinks?.items.map(item => item.paymentId) ?? []);
+  const availablePayments = paymentGroups.filter(group =>
+    !linkedPayments.has(group.paymentId) && !group.latest.subscriptionId);
+  const fmtMoney = (cents: number) =>
+    (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  async function submitBillingLink(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!billingLinks?.enabled || !selectedLinkUnit || selectedLinkUnit.isDemo ||
+        !selectedLinkPlan || !selectedLinkEvent || linkedPayments.has(selectedLinkEvent.paymentId) ||
+        linkName.trim() !== selectedLinkUnit.name || linkReason.trim().length < 12 ||
+        linkReason.trim().length > 350 || linkSaving) return;
+    setLinkSaving(true);
+    setLinkMessage("");
+    try {
+      await createBillingLink({
+        organizationId: selectedLinkUnit.id,
+        planDraftId: selectedLinkPlan._id,
+        sourceInboxId: selectedLinkEvent.latest.id,
+        expectedPlanUpdatedAt: selectedLinkPlan.updatedAt,
+        confirmedOrganizationName: linkName,
+        reason: linkReason,
+      });
+      setLinkMessage("Vínculo de homologação registrado. Nenhum acesso ou pagamento foi alterado.");
+      setLinkEventId("");
+      setLinkName("");
+      setLinkReason("");
+    } catch (error) {
+      setLinkMessage(error instanceof Error ? error.message : "Não foi possível criar o vínculo.");
+    } finally {
+      setLinkSaving(false);
+    }
+  }
+
+  async function submitVoidLink(link: NonNullable<typeof billingLinks>["items"][number]) {
+    if (!billingLinks?.enabled || voidSaving || voidName.trim() !== link.organizationName ||
+        voidReason.trim().length < 12) return;
+    setVoidSaving(true);
+    setLinkMessage("");
+    try {
+      await voidBillingLink({
+        linkId: link.id, expectedUpdatedAt: link.updatedAt,
+        confirmedOrganizationName: voidName, reason: voidReason,
+      });
+      setVoidTargetId(null);
+      setVoidName("");
+      setVoidReason("");
+      setLinkMessage("Vínculo invalidado sem excluir a auditoria. A cobrança não poderá ser reutilizada.");
+    } catch (error) {
+      setLinkMessage(error instanceof Error ? error.message : "Erro ao invalidar vínculo.");
+    } finally {
+      setVoidSaving(false);
+    }
+  }
+
+  function exportSandboxLinksCsv() {
+    if (!billingLinks?.items.length) return;
+    const csv = sandboxLinksCsv(billingLinks.items);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "barber-os-vinculos-sandbox.csv";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function reviewAssociation(linkId: Id<"sandboxBillingLinks">) {
+    if (reviewingLinkId || !billingInbox?.lookupEnabled) return;
+    setReviewingLinkId(linkId);
+    setLinkReviewError("");
+    try {
+      const result = await reviewBillingLink({ linkId });
+      setLinkReviews(previous => ({
+        ...previous,
+        [linkId]: {
+          status: result.status, amountMatches: result.amountMatches,
+          paidStatus: result.paidStatus,
+          cashRecordedOutsideAsaas: result.cashRecordedOutsideAsaas,
+          receivedAmountCents: result.receivedAmountCents,
+          expectedAmountCents: result.expectedAmountCents,
+          checkedAt: result.checkedAt,
+        },
+      }));
+    } catch {
+      setLinkReviewError("Não foi possível comparar a cobrança com o plano na API Sandbox.");
+    } finally {
+      setReviewingLinkId(null);
+    }
+  }
+
 
   async function verifySandboxStatus(inboxId: Id<"billingWebhookInbox">) {
     if (checkingPayment || !billingInbox?.lookupEnabled) return;
@@ -711,6 +835,178 @@ export default function PlatformAdmin() {
               </p>
               {paymentCheckError && <p role="alert" className="mt-2 text-sm text-destructive">{paymentCheckError}</p>}
             </div>
+          )}
+        </section>
+
+
+        <section className="glass rounded-2xl p-5" aria-label="Vínculos comerciais de homologação">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold">Vínculos comerciais — Sandbox</h2>
+            <Button type="button" size="sm" variant="outline"
+              disabled={!billingLinks?.items.length} onClick={exportSandboxLinksCsv}>
+              <Download className="size-4" /> Exportar CSV ({billingLinks?.items.length ?? 0})
+            </Button>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Associe manualmente uma cobrança já recebida a uma unidade e a um rascunho de plano.
+            Isso é somente preparação: não cria cobrança, não reconhece receita e não libera acesso.
+          </p>
+          {!billingLinks ? (
+            <p className="mt-4 text-sm text-muted-foreground">Carregando vínculos…</p>
+          ) : (
+            <>
+              {!billingLinks.enabled && (
+                <p className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
+                  Associação administrativa desabilitada por padrão.
+                  O servidor exige BARBER_ASAAS_LINKING_ENABLED=true somente no Convex Development de homologação.
+                </p>
+              )}
+              <form onSubmit={submitBillingLink} className="mt-5 grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium" htmlFor="sandbox-link-unit">Barbearia</label>
+                  <select id="sandbox-link-unit" required value={linkUnitId}
+                    onChange={e => { setLinkUnitId(e.target.value); setLinkName(""); }}
+                    className="glass-input h-10 w-full rounded-lg border px-3 text-sm">
+                    <option value="">Selecione uma unidade</option>
+                    {(overview?.organizations ?? []).filter(org => !org.isDemo).map(org => (
+                      <option key={org.id} value={org.id}>{org.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium" htmlFor="sandbox-link-plan">Plano previsto</label>
+                  <select id="sandbox-link-plan" required value={linkPlanId}
+                    onChange={e => setLinkPlanId(e.target.value)}
+                    className="glass-input h-10 w-full rounded-lg border px-3 text-sm">
+                    <option value="">Selecione um rascunho</option>
+                    {(drafts ?? []).filter(plan => plan.priceCents > 0).map(plan => (
+                      <option key={plan._id} value={plan._id}>
+                        {plan.name} — {fmtMoney(plan.priceCents)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-sm font-medium" htmlFor="sandbox-link-payment">Cobrança recebida (evento Sandbox)</label>
+                  <select id="sandbox-link-payment" required value={linkEventId}
+                    onChange={e => setLinkEventId(e.target.value)}
+                    className="glass-input h-10 w-full rounded-lg border px-3 text-sm">
+                    <option value="">Selecione uma cobrança ainda não associada</option>
+                    {availablePayments.map(group => (
+                      <option key={group.paymentId} value={group.latest.id}>
+                        {group.paymentId} · {SANDBOX_EVENT_LABELS[group.latest.eventType] ?? group.latest.eventType}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Apresenta somente as cobranças avulsas visíveis entre os últimos 30 eventos recebidos.
+                  </p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium" htmlFor="sandbox-link-confirm">
+                    Confirme o nome completo da unidade: {selectedLinkUnit?.name ?? "—"}
+                  </label>
+                  <Input id="sandbox-link-confirm" autoComplete="off" required
+                    value={linkName} onChange={e => setLinkName(e.target.value)} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium" htmlFor="sandbox-link-reason">
+                    Justificativa (12 a 350 caracteres)
+                  </label>
+                  <textarea id="sandbox-link-reason" required minLength={12} maxLength={350}
+                    value={linkReason} onChange={e => setLinkReason(e.target.value)}
+                    className="glass-input min-h-20 w-full rounded-lg border p-3 text-sm"
+                    placeholder="Associação manual autorizada para testar o contrato no Sandbox" />
+                </div>
+                <div className="md:col-span-2">
+                  <Button type="submit" disabled={!billingLinks.enabled || linkSaving ||
+                    !selectedLinkUnit || !selectedLinkPlan || !selectedLinkEvent ||
+                    linkName.trim() !== selectedLinkUnit.name ||
+                    linkReason.trim().length < 12 || linkReason.trim().length > 350}>
+                    {linkSaving ? "Registrando…" : "Criar vínculo de homologação"}
+                  </Button>
+                </div>
+              </form>
+              {linkMessage && <p role="status" className="mt-3 text-sm">{linkMessage}</p>}
+              <div className="mt-6 border-t border-border/60 pt-4">
+                <h3 className="text-sm font-semibold">Últimos vínculos registrados (até 50)</h3>
+                {billingLinks.items.length === 0 ? (
+                  <p className="mt-2 text-sm text-muted-foreground">Nenhum vínculo criado.</p>
+                ) : (
+                  <ul className="mt-3 space-y-3">
+                    {billingLinks.items.map(link => (
+                      <li key={link.id} className="rounded-xl border border-border/60 p-3 text-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="font-semibold">{link.organizationName} · {link.planName}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {link.paymentId} · Plano previsto {fmtMoney(link.priceCents)}
+                              {" · "}Criado em {new Date(link.createdAt).toLocaleString("pt-BR")}
+                            </p>
+                          </div>
+                          <Badge variant="outline">
+                            {link.status === "voided" ? "Vínculo invalidado" : "Aguardando revisão"}
+                          </Badge>
+                        </div>
+                        {link.status === "pending_review" && (
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <Button type="button" size="sm" variant="outline"
+                              disabled={!billingInbox?.lookupEnabled || reviewingLinkId !== null}
+                              onClick={() => void reviewAssociation(link.id)}>
+                              {reviewingLinkId === link.id ? "Verificando…" : "Comparar valor e status"}
+                            </Button>
+                            <Button type="button" size="sm" variant="outline"
+                              disabled={!billingLinks.enabled}
+                              onClick={() => {
+                                setVoidTargetId(voidTargetId === link.id ? null : link.id);
+                                setVoidReason(""); setVoidName("");
+                              }}>Invalidar vínculo</Button>
+                          </div>
+                        )}
+                        {linkReviews[link.id] && link.status === "pending_review" && (
+                          <div role="status" className="mt-3 rounded-lg border border-border/60 p-3 text-xs">
+                            <p>Status atual: <strong>{linkReviews[link.id].status}</strong> ·
+                              {" "}Valor no Asaas: {fmtMoney(linkReviews[link.id].receivedAmountCents)} ·
+                              {" "}Plano: {fmtMoney(linkReviews[link.id].expectedAmountCents)}
+                            </p>
+                            <p className="mt-1">
+                              {linkReviews[link.id].amountMatches ? "Valor compatível" : "Valor divergente"} ·
+                              {" "}{linkReviews[link.id].paidStatus ? "Status de pagamento recebido/confirmado" : "Pagamento não confirmado"}
+                              {linkReviews[link.id].cashRecordedOutsideAsaas ? " · Baixa em dinheiro fora do Asaas" : ""}
+                            </p>
+                            <p className="mt-1 text-muted-foreground">
+                              Titularidade contratual não verificada. Nenhum acesso será liberado automaticamente.
+                            </p>
+                          </div>
+                        )}
+                        {voidTargetId === link.id && link.status === "pending_review" && (
+                          <div className="mt-3 grid gap-2 border-t border-border/60 pt-3">
+                            <label htmlFor="sandbox-void-confirm" className="text-xs font-medium">
+                              Digite o nome exato da unidade para invalidar: {link.organizationName}
+                            </label>
+                            <Input id="sandbox-void-confirm" value={voidName}
+                              onChange={e => setVoidName(e.target.value)} />
+                            <label htmlFor="sandbox-void-reason" className="text-xs font-medium">
+                              Justificativa de invalidação (mínimo 12 caracteres)
+                            </label>
+                            <textarea id="sandbox-void-reason" minLength={12} maxLength={350}
+                              className="glass-input min-h-20 w-full rounded-lg border p-3 text-sm"
+                              value={voidReason} onChange={e => setVoidReason(e.target.value)} />
+                            <Button type="button" size="sm" variant="destructive"
+                              disabled={voidSaving || voidName.trim() !== link.organizationName ||
+                                voidReason.trim().length < 12}
+                              onClick={() => void submitVoidLink(link)}>
+                              {voidSaving ? "Invalidando…" : "Confirmar invalidação"}
+                            </Button>
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {linkReviewError && <p role="alert" className="mt-3 text-sm text-destructive">{linkReviewError}</p>}
+              </div>
+            </>
           )}
         </section>
 

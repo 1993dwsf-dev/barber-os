@@ -23,7 +23,7 @@ async function isPlatformAdmin(ctx: QueryCtx | MutationCtx): Promise<boolean> {
   return user.email?.trim().toLowerCase() === allowedEmail;
 }
 
-async function requirePlatformAdmin(ctx: QueryCtx | MutationCtx): Promise<void> {
+export async function requirePlatformAdmin(ctx: QueryCtx | MutationCtx): Promise<void> {
   if (!(await isPlatformAdmin(ctx))) {
     throw new HttpError("Acesso restrito à administração da plataforma.");
   }

@@ -224,3 +224,50 @@ O agrupamento é somente de apresentação no frontend, com ordenação por `rec
 **Limite de exibição:** a consulta administrativa busca no máximo 30 **eventos**, que podem representar menos de 30 cobranças. O histórico de uma cobrança pode ser parcial quando eventos antigos estiverem fora desse limite. **A última movimentação recebida não substitui a consulta autenticada à API do Asaas e não significa conciliação bancária ou assinatura concedida.**
 
 Alteração exclusiva de frontend, utilitário e testes; não requer `bunx convex dev --once`.
+
+
+## Etapa v7 — associação de cobrança Sandbox a barbearia e plano (não operacional)
+
+O Admin permite associar **uma cobrança avulsa já recebida por webhook** a uma unidade não-demo e a um **rascunho** de plano com preço positivo. A associação é um registro de homologação `sandboxBillingLinks`, **não é um contrato válido, assinatura ativa, receita conciliada ou vínculo verificado de titularidade**.
+
+### Controles para criar associação
+
+- Exige autenticação global do administrador com ID de usuário e e-mail verificado no backend.
+- Exige `BARBER_ASAAS_LINKING_ENABLED=true`, `BARBER_ASAAS_ENV=sandbox`, deployment `unique-tortoise-387` e `BARBER_BILLING_ENFORCED` não habilitado.
+- Só permite associar um pagamento avulso já presente na `billingWebhookInbox`, sempre como `pending_review`, sem criar novas cobranças via Asaas.
+- Precisa do nome **exato** da unidade, justificativa de 12 a 350 caracteres, e da versão (`updatedAt`) do rascunho de plano que foi exibido.
+- O nome e valor do rascunho ficam congelados na associação (`planNameSnapshot`, `priceCentsSnapshot`), evitando que alterações futuras no catálogo reescrevam a referência.
+- Cada `paymentId` só pode ter uma associação na plataforma, inclusive após invalidação. A operação é transacional e bloqueia tentativas concorrentes de reutilização.
+- Unidade demo ou com `organizationEntitlements.source="billing"` não pode receber associação manual.
+- A associação pode ser **invalidada**, com nome exato da unidade, justificativa e revisão otimista. O registro é preservado; não se permite reutilizar a mesma cobrança.
+- Criação e invalidação registram entradas em `platformAdminAuditLogs`. O Admin visualiza os 50 vínculos recentes.
+
+### Comparação com o Asaas
+
+O botão **Comparar valor e status** consulta via backend o endpoint oficial `GET https://api-sandbox.asaas.com/v3/payments/{id}` para a cobrança já vinculada. Compara valor e situação com os dados congelados do rascunho e informa divergências. Só utiliza a API key privada definida no Convex, exige permissão global de administrador e verifica `BARBER_ASAAS_LOOKUP_ENABLED`.
+
+A verificação **não armazena informações financeiras de compradores nem responde com CPF, nome ou identificador do cliente**. A consulta também **não altera nenhum entitlement**, nenhum status comercial, nenhuma receita ou repasse.
+
+Mesmo se o status for `RECEIVED` e o valor coincidir, a **titularidade do cliente no Asaas e seu contrato com a barbearia não estão comprovados**. Por isso o resultado é apenas demonstrativo, não concede acesso e **não pode ser usado como condição para ativação automática**. O estado `RECEIVED_IN_CASH` também é distinguido e não equivale a liquidação na conta.
+
+### Implantação e ativação
+
+1. Validar CI, testes de autenticação, navegação e storage isolado.
+2. Confirmar que o Codespaces está no projeto `barber-os-homologacao`, deployment Development `dev:unique-tortoise-387`.
+3. Publicar via `bunx convex dev --once` na branch `feat/admin-sandbox-billing-links`. **Nunca `convex deploy`.**
+4. Mesclar PR à `staging` somente depois da publicação do backend.
+5. No painel privado do Convex Development, habilitar **apenas para homologação** `BARBER_ASAAS_LINKING_ENABLED=true`; não colocar em `VITE_*`, Cloudflare ou GitHub.
+6. Selecionar unidade de testes, rascunho de plano com mensalidade válida e pagamento avulso disponível; confirmar pelo nome e justificativa.
+7. Comparar a cobrança com o plano. Caso o valor seja diferente, é correto exibir **Valor divergente**. A cobrança anterior de R$ 10,00, por exemplo, não deve ser considerada compatível com um plano de R$ 59,90.
+8. Invalidar o vínculo de teste, se necessário, mantendo auditoria. Desabilitar a flag ao final da sessão.
+
+### Bloqueios intencionais para produção
+
+Ainda faltam checkout e criação de cliente/cobrança via backend, vínculo de titularidade não adulterável, preço negociado/contrato vigente, integração para valores descontados/parcelados, pagamentos recorrentes, devoluções/chargeback, idempotência financeira e restrição de acesso validada. **Não habilitar cobrança real, não liberar tenants por status isolado e não representar esta associação como assinatura paga.**
+
+Referência do Asaas: [Recuperar uma única cobrança](https://docs.asaas.com/reference/recuperar-uma-unica-cobranca).
+
+
+### Exportação CSV da associação Sandbox
+
+O Admin oferece `Exportar CSV` contendo apenas os até 50 vínculos recentes atualmente retornados pela API global administrativa. Usa UTF-8 com BOM, separador `;`, aspas escapadas, proteção contra **formula injection** no Excel e datas ISO. O arquivo inclui barbearia, ID da cobrança Sandbox, rascunho do plano, preço previsto e situação administrativa, com aviso explícito de que **não comprova receita nem concede acesso**. Nenhum dado de cliente Asaas, CPF ou token aparece.
