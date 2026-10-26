@@ -147,7 +147,7 @@ describe("rota HTTP real do Convex (simulada via convex-test)", () => {
     vi.stubEnv("BARBER_ASAAS_WEBHOOK_TOKEN", token);
     expect((await send(payload, null)).status).toBe(401);
     expect((await send(payload, "wrong")).status).toBe(401);
-    expect((await t.run(ctx => ctx.db.query("billingWebhookInbox").collect())).toHaveLength(0);
+    expect(await t.run(ctx => ctx.db.query("billingWebhookInbox").collect())).toHaveLength(0);
   });
 
   test("registra evento válido, ignora entrega duplicada e rejeita payload incorreto", async () => {
