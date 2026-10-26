@@ -13,6 +13,7 @@ import {
 import {
   groupSandboxPaymentEvents, SANDBOX_EVENT_LABELS,
 } from "@/lib/asaas-payment-groups";
+import { sandboxLinksCsv } from "@/lib/asaas-link-csv";
 import {
   Building2, CalendarDays, ChevronLeft, ClipboardList, LockKeyhole,
   LogOut, Search, ShieldCheck, Store, Users, Eye, Pencil, Save, Tag, PauseCircle,
@@ -156,6 +157,20 @@ export default function PlatformAdmin() {
     } finally {
       setVoidSaving(false);
     }
+  }
+
+  function exportSandboxLinksCsv() {
+    if (!billingLinks?.items.length) return;
+    const csv = sandboxLinksCsv(billingLinks.items);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "barber-os-vinculos-sandbox.csv";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   }
 
   async function reviewAssociation(linkId: Id<"sandboxBillingLinks">) {
@@ -825,7 +840,13 @@ export default function PlatformAdmin() {
 
 
         <section className="glass rounded-2xl p-5" aria-label="Vínculos comerciais de homologação">
-          <h2 className="text-lg font-semibold">Vínculos comerciais — Sandbox</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold">Vínculos comerciais — Sandbox</h2>
+            <Button type="button" size="sm" variant="outline"
+              disabled={!billingLinks?.items.length} onClick={exportSandboxLinksCsv}>
+              <Download className="size-4" /> Exportar CSV ({billingLinks?.items.length ?? 0})
+            </Button>
+          </div>
           <p className="mt-1 text-sm text-muted-foreground">
             Associe manualmente uma cobrança já recebida a uma unidade e a um rascunho de plano.
             Isso é somente preparação: não cria cobrança, não reconhece receita e não libera acesso.
