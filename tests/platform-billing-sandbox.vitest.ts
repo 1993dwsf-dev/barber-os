@@ -10,7 +10,7 @@ beforeEach(() => {
   t = convexTest(schema, modules);
   vi.unstubAllEnvs();
 });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 const event = {
   eventId: "evt_05b708f961d739ea7eba7e4db318f621",
@@ -161,5 +161,74 @@ describe("rota HTTP real do Convex (simulada via convex-test)", () => {
     const events = await t.run(ctx => ctx.db.query("billingWebhookInbox").collect());
     expect(events).toHaveLength(1);
     expect(events[0].eventId).toBe(event.eventId);
+  });
+});
+
+
+describe("verificação manual de pagamento Sandbox — somente leitura", () => {
+  function enableLookup() {
+    enableSandbox();
+    vi.stubEnv("BARBER_ASAAS_LOOKUP_ENABLED", "true");
+    vi.stubEnv("BARBER_ASAAS_API_KEY", "sandbox_example_key_DO_NOT_USE_IN_PRODUCTION_0123456789");
+  }
+
+  test("nega verificação sem flag mesmo quando existe webhook", async () => {
+    enableSandbox();
+    const admin = await account("admin@example.test");
+    vi.stubEnv("BARBER_PLATFORM_ADMIN_USER_ID", admin.userId);
+    vi.stubEnv("BARBER_PLATFORM_ADMIN_EMAIL", "admin@example.test");
+    await t.mutation(internal.platformAdmin.recordAsaasSandboxEvent, event);
+    const inbox = await admin.caller.query(api.platformAdmin.billingInbox, {});
+    expect(inbox.lookupEnabled).toBe(false);
+    await expect(admin.caller.action(api.billingSandbox.checkPaymentStatus, {
+      inboxId: inbox.items[0].id,
+    })).rejects.toThrow(/desabilitada/i);
+  });
+
+  test("proprietário de barbearia não consulta API externa como admin", async () => {
+    enableLookup();
+    const admin = await account("admin@example.test");
+    const outsider = await account("outsider@example.test");
+    vi.stubEnv("BARBER_PLATFORM_ADMIN_USER_ID", admin.userId);
+    vi.stubEnv("BARBER_PLATFORM_ADMIN_EMAIL", "admin@example.test");
+    await t.mutation(internal.platformAdmin.recordAsaasSandboxEvent, event);
+    const inbox = await admin.caller.query(api.platformAdmin.billingInbox, {});
+    await expect(outsider.caller.action(api.billingSandbox.checkPaymentStatus, {
+      inboxId: inbox.items[0].id,
+    })).rejects.toThrow(/restrito/i);
+  });
+
+  test("consulta a API por ID recebido, não grava permissões nem dados do cliente", async () => {
+    enableLookup();
+    const admin = await account("admin@example.test");
+    vi.stubEnv("BARBER_PLATFORM_ADMIN_USER_ID", admin.userId);
+    vi.stubEnv("BARBER_PLATFORM_ADMIN_EMAIL", "admin@example.test");
+    await t.mutation(internal.platformAdmin.recordAsaasSandboxEvent, event);
+    const inbox = await admin.caller.query(api.platformAdmin.billingInbox, {});
+    expect(inbox.lookupEnabled).toBe(true);
+    const mockFetch = vi.fn(async (url: unknown, options: unknown) => {
+      expect(url).toBe("https://api-sandbox.asaas.com/v3/payments/pay_080225913252/status");
+      expect(options).toBeDefined();
+      return new Response(JSON.stringify({ status: "RECEIVED", cpfCnpj: "00000000000" }), {
+        status: 200, headers: { "content-type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const result = await admin.caller.action(api.billingSandbox.checkPaymentStatus, {
+      inboxId: inbox.items[0].id,
+    });
+    expect(result.status).toBe("RECEIVED");
+    expect(result.environment).toBe("sandbox");
+    expect(JSON.stringify(result)).not.toContain("00000000000");
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0][0]).toBe(
+      "https://api-sandbox.asaas.com/v3/payments/pay_080225913252/status");
+    const state = await t.run(async ctx => ({
+      entitlements: await ctx.db.query("organizationEntitlements").collect(),
+      inbox: await ctx.db.query("billingWebhookInbox").collect(),
+    }));
+    expect(state.entitlements).toHaveLength(0);
+    expect(state.inbox).toHaveLength(1);
   });
 });

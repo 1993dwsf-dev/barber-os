@@ -1,5 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { HttpError } from "./lib";
@@ -395,6 +395,12 @@ export const billingInbox = query({
       .withIndex("by_received").order("desc").take(30);
     return {
       enabled: sandboxWebhookEnabled(),
+      lookupEnabled: process.env.BARBER_ASAAS_LOOKUP_ENABLED === "true" &&
+        process.env.BARBER_ASAAS_ENV === "sandbox" &&
+        process.env.BARBER_BILLING_ENFORCED !== "true" &&
+        process.env.CONVEX_CLOUD_URL?.replace(/\/$/, "") ===
+          "https://unique-tortoise-387.convex.cloud" &&
+        Boolean(process.env.BARBER_ASAAS_API_KEY?.trim()),
       items: events.map(e => ({
         id: e._id,
         eventId: e.eventId,
@@ -404,5 +410,20 @@ export const billingInbox = query({
         receivedAt: e.receivedAt,
       })),
     };
+  },
+});
+
+
+/** Busca mínima de evento para verificação externa somente leitura.
+ * Esta query é interna: somente actions do backend a acessam.
+ */
+export const billingInboxPaymentForLookup = internalQuery({
+  args: { id: v.id("billingWebhookInbox") },
+  handler: async (ctx, { id }) => {
+    const record = await ctx.db.get(id);
+    if (!record || record.provider !== "asaas" || record.environment !== "sandbox") {
+      return null;
+    }
+    return { paymentId: record.paymentId, eventId: record.eventId };
   },
 });
