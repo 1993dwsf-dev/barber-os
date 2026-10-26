@@ -74,6 +74,107 @@ export default function PlatformAdmin() {
     Record<string, { status: string; checkedAt: number }>
   >({});
   const [paymentCheckError, setPaymentCheckError] = useState("");
+  // Pedidos de cobrança originados no Barber OS, somente Asaas Sandbox.
+  const sandboxOrders = useQuery(api.sandboxOrders.orders, allowed === true ? {} : "skip");
+  const prepareSandboxOrder = useMutation(api.sandboxOrders.prepareOrder);
+  const voidSandboxDraft = useMutation(api.sandboxOrders.voidDraft);
+  const sendSandboxOrder = useAction(api.sandboxOrders.sendOrder);
+  const recoverSandboxOrder = useAction(api.sandboxOrders.recoverOrder);
+  const [orderUnitId, setOrderUnitId] = useState("");
+  const [orderPlanId, setOrderPlanId] = useState("");
+  const [orderCustomerId, setOrderCustomerId] = useState("");
+  const [orderBillingType, setOrderBillingType] = useState<"PIX" | "BOLETO">("PIX");
+  const [orderDueDate, setOrderDueDate] = useState("");
+  const [orderConfirmName, setOrderConfirmName] = useState("");
+  const [orderReason, setOrderReason] = useState("");
+  const [orderBusy, setOrderBusy] = useState(false);
+  const [orderMessage, setOrderMessage] = useState("");
+  const [orderActionId, setOrderActionId] = useState<string | null>(null);
+  const [orderVoidTarget, setOrderVoidTarget] = useState<string | null>(null);
+  const [orderVoidName, setOrderVoidName] = useState("");
+  const [orderVoidReason, setOrderVoidReason] = useState("");
+
+  const selectedOrderUnit = overview?.organizations.find(o => o.id === orderUnitId);
+  const selectedOrderPlan = drafts?.find(p => p._id === orderPlanId);
+
+  async function submitOrderDraft(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!sandboxOrders?.enabled || orderBusy ||
+        !selectedOrderUnit || selectedOrderUnit.isDemo || !selectedOrderPlan ||
+        orderConfirmName.trim() !== selectedOrderUnit.name ||
+        !orderCustomerId.trim() || !orderDueDate ||
+        orderReason.trim().length < 12 || orderReason.trim().length > 350) return;
+    setOrderBusy(true);
+    setOrderMessage("");
+    try {
+      await prepareSandboxOrder({
+        organizationId: selectedOrderUnit.id,
+        planDraftId: selectedOrderPlan._id,
+        expectedPlanUpdatedAt: selectedOrderPlan.updatedAt,
+        customerId: orderCustomerId.trim(),
+        billingType: orderBillingType,
+        dueDate: orderDueDate,
+        confirmedOrganizationName: orderConfirmName,
+        reason: orderReason,
+      });
+      setOrderMessage("Pedido de homologação preparado. Nenhuma cobrança foi enviada ainda.");
+      setOrderCustomerId("");
+      setOrderConfirmName("");
+      setOrderReason("");
+      setOrderDueDate("");
+    } catch (err) {
+      setOrderMessage(err instanceof Error ? err.message : "Não foi possível preparar o pedido.");
+    } finally {
+      setOrderBusy(false);
+    }
+  }
+
+  async function executeSandboxOrder(orderId: Id<"sandboxBillingOrders">, mode: "send" | "recover") {
+    if (!sandboxOrders?.enabled || orderActionId) return;
+    if (mode === "send" && !window.confirm(
+      "Você autoriza emitir UMA cobrança fictícia somente no Asaas Sandbox? " +
+      "Em caso de falha de rede, o sistema NÃO fará uma segunda emissão automática.",
+    )) return;
+    setOrderActionId(orderId);
+    setOrderMessage("");
+    try {
+      const result = mode === "send"
+        ? await sendSandboxOrder({ orderId })
+        : await recoverSandboxOrder({ orderId });
+      setOrderMessage(mode === "send"
+        ? `Cobrança fictícia emitida: ${result.paymentId}. Nenhuma assinatura ativada.`
+        : result.paymentId
+          ? `Pedido recuperado por consulta: ${result.paymentId}. Nenhuma assinatura ativada.`
+          : "Nenhuma cobrança encontrada pela referência. Pedido permanece incerto, sem novo envio.");
+    } catch (err) {
+      setOrderMessage(err instanceof Error ? err.message : "Operação Sandbox não concluída.");
+    } finally {
+      setOrderActionId(null);
+    }
+  }
+
+  async function cancelSandboxDraft(order: NonNullable<typeof sandboxOrders>["items"][number]) {
+    if (!sandboxOrders?.enabled || orderBusy ||
+        orderVoidName.trim() !== order.organizationName ||
+        orderVoidReason.trim().length < 12 || orderVoidReason.trim().length > 350) return;
+    setOrderBusy(true);
+    setOrderMessage("");
+    try {
+      await voidSandboxDraft({
+        orderId: order.id, confirmedOrganizationName: orderVoidName,
+        reason: orderVoidReason,
+      });
+      setOrderMessage("Rascunho invalidado antes de enviar cobrança.");
+      setOrderVoidTarget(null);
+      setOrderVoidName("");
+      setOrderVoidReason("");
+    } catch (err) {
+      setOrderMessage(err instanceof Error ? err.message : "Não foi possível invalidar o rascunho.");
+    } finally {
+      setOrderBusy(false);
+    }
+  }
+
   const billingLinks = useQuery(api.platformBilling.links, allowed === true ? {} : "skip");
   const createBillingLink = useMutation(api.platformBilling.createLink);
   const voidBillingLink = useMutation(api.platformBilling.voidLink);
@@ -1005,6 +1106,190 @@ export default function PlatformAdmin() {
                   </ul>
                 )}
                 {linkReviewError && <p role="alert" className="mt-3 text-sm text-destructive">{linkReviewError}</p>}
+              </div>
+            </>
+          )}
+        </section>
+
+
+        <section className="glass rounded-2xl p-5" aria-label="Pedidos de cobrança gerados pela plataforma Sandbox">
+          <h2 className="text-lg font-semibold">Emissão de cobranças — somente Sandbox</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Prepare pedidos originados no Barber OS com referência rastreável no Asaas. A emissão
+            é uma ação separada, exclusivamente fictícia e sem liberação de assinaturas.
+          </p>
+          {!sandboxOrders ? (
+            <p className="mt-4 text-sm text-muted-foreground">Carregando pedidos Sandbox…</p>
+          ) : (
+            <>
+              {!sandboxOrders.enabled && (
+                <p role="status" className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
+                  Emissão desabilitada no servidor. Requer BARBER_ASAAS_ORDER_WRITES=true,
+                  consulta Sandbox habilitada e deployment de homologação unique-tortoise-387.
+                  Não habilite em produção.
+                </p>
+              )}
+              <form onSubmit={submitOrderDraft} className="mt-5 grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium" htmlFor="sb-order-unit">Barbearia</label>
+                  <select id="sb-order-unit" required value={orderUnitId}
+                    onChange={e => { setOrderUnitId(e.target.value); setOrderConfirmName(""); }}
+                    className="glass-input h-10 w-full rounded-lg border px-3 text-sm">
+                    <option value="">Escolha uma barbearia</option>
+                    {(overview?.organizations ?? []).filter(o => !o.isDemo).map(o => (
+                      <option value={o.id} key={o.id}>{o.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium" htmlFor="sb-order-plan">Plano previsto</label>
+                  <select id="sb-order-plan" required value={orderPlanId}
+                    onChange={e => setOrderPlanId(e.target.value)}
+                    className="glass-input h-10 w-full rounded-lg border px-3 text-sm">
+                    <option value="">Escolha um rascunho comercial</option>
+                    {(drafts ?? []).filter(p => p.priceCents > 0).map(p => (
+                      <option key={p._id} value={p._id}>
+                        {p.name} · {(p.priceCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium" htmlFor="sb-order-customer">
+                    ID do cliente no Asaas Sandbox
+                  </label>
+                  <Input id="sb-order-customer" placeholder="cus_..." autoComplete="off"
+                    required value={orderCustomerId} onChange={e => setOrderCustomerId(e.target.value)} />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Utilize um cliente fictício já cadastrado no Sandbox. Não insira CPF ou dados pessoais.
+                  </p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium" htmlFor="sb-order-due">
+                    Vencimento (hoje até 45 dias)
+                  </label>
+                  <Input id="sb-order-due" type="date" required
+                    value={orderDueDate} onChange={e => setOrderDueDate(e.target.value)} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium" htmlFor="sb-order-method">Modalidade</label>
+                  <select id="sb-order-method" value={orderBillingType}
+                    onChange={e => setOrderBillingType(e.target.value as "PIX" | "BOLETO")}
+                    className="glass-input h-10 w-full rounded-lg border px-3 text-sm">
+                    <option value="PIX">Pix (Sandbox)</option>
+                    <option value="BOLETO">Boleto (Sandbox)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium" htmlFor="sb-order-confirm">
+                    Confirme o nome exato: {selectedOrderUnit?.name ?? "—"}
+                  </label>
+                  <Input id="sb-order-confirm" autoComplete="off" required
+                    value={orderConfirmName} onChange={e => setOrderConfirmName(e.target.value)} />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-sm font-medium" htmlFor="sb-order-reason">
+                    Justificativa administrativa (12 a 350 caracteres)
+                  </label>
+                  <textarea id="sb-order-reason" minLength={12} maxLength={350} required
+                    value={orderReason} onChange={e => setOrderReason(e.target.value)}
+                    className="glass-input min-h-16 w-full rounded-lg border p-3 text-sm"
+                    placeholder="Emitir cobrança fictícia para validar o fluxo de homologação" />
+                </div>
+                <div className="md:col-span-2">
+                  <Button type="submit" disabled={!sandboxOrders.enabled || orderBusy ||
+                    !selectedOrderUnit || !selectedOrderPlan || !orderCustomerId.trim() ||
+                    !orderDueDate || orderConfirmName.trim() !== selectedOrderUnit.name ||
+                    orderReason.trim().length < 12 || orderReason.trim().length > 350}>
+                    {orderBusy ? "Preparando…" : "Preparar pedido (não emite cobrança)"}
+                  </Button>
+                </div>
+              </form>
+              {orderMessage && <p role="status" className="mt-3 text-sm">{orderMessage}</p>}
+              <div className="mt-6 border-t border-border/60 pt-4">
+                <h3 className="text-sm font-semibold">Pedidos recentes (até 50)</h3>
+                {sandboxOrders.items.length === 0 ? (
+                  <p className="mt-2 text-sm text-muted-foreground">Nenhum pedido preparado.</p>
+                ) : (
+                  <ul className="mt-3 space-y-3">
+                    {sandboxOrders.items.map(order => (
+                      <li key={order.id} className="rounded-xl border border-border/60 p-3 text-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="font-semibold">{order.organizationName} · {order.planName}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {(order.amountCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                              {" · "}{order.billingType} · Vence {order.dueDate}
+                            </p>
+                            <p className="mt-1 break-all text-xs text-muted-foreground">
+                              Ref. {order.externalReference}
+                              {order.paymentId ? ` · Cobrança ${order.paymentId}` : ""}
+                            </p>
+                          </div>
+                          <Badge variant={order.status === "uncertain" ? "destructive" : "outline"}>
+                            {({
+                              draft: "Rascunho",
+                              sending: "Envio em andamento/indefinido",
+                              uncertain: "Resposta incerta — NÃO REENVIAR",
+                              created: "Cobrança criada no Sandbox",
+                              voided: "Rascunho invalidado",
+                            } as Record<string, string>)[order.status] ?? order.status}
+                          </Badge>
+                        </div>
+                        {order.status === "draft" && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Button type="button" size="sm" variant="outline"
+                              disabled={!sandboxOrders.enabled || orderActionId !== null}
+                              onClick={() => void executeSandboxOrder(order.id, "send")}>
+                              {orderActionId === order.id ? "Emitindo…" : "Emitir UMA cobrança fictícia"}
+                            </Button>
+                            <Button type="button" size="sm" variant="outline"
+                              disabled={!sandboxOrders.enabled || orderBusy}
+                              onClick={() => {
+                                setOrderVoidTarget(orderVoidTarget === order.id ? null : order.id);
+                                setOrderVoidName(""); setOrderVoidReason("");
+                              }}>
+                              Invalidar rascunho
+                            </Button>
+                          </div>
+                        )}
+                        {(order.status === "sending" || order.status === "uncertain") && (
+                          <div className="mt-3">
+                            <Button type="button" size="sm" variant="outline"
+                              disabled={!sandboxOrders.enabled || orderActionId !== null}
+                              onClick={() => void executeSandboxOrder(order.id, "recover")}>
+                              {orderActionId === order.id ? "Buscando…" : "Buscar cobrança pela referência (somente leitura)"}
+                            </Button>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Nunca envie outra cobrança automaticamente. Recuperação consulta o Asaas sem repetir POST.
+                            </p>
+                          </div>
+                        )}
+                        {orderVoidTarget === order.id && order.status === "draft" && (
+                          <div className="mt-3 space-y-2 border-t border-border/60 pt-3">
+                            <label className="block text-xs font-medium" htmlFor="sb-void-name">
+                              Confirme a barbearia: {order.organizationName}
+                            </label>
+                            <Input id="sb-void-name" autoComplete="off" value={orderVoidName}
+                              onChange={e => setOrderVoidName(e.target.value)} />
+                            <label className="block text-xs font-medium" htmlFor="sb-void-reason">
+                              Justificativa da invalidação
+                            </label>
+                            <textarea id="sb-void-reason" minLength={12} maxLength={350}
+                              className="glass-input min-h-16 w-full rounded-lg border p-3 text-sm"
+                              value={orderVoidReason} onChange={e => setOrderVoidReason(e.target.value)} />
+                            <Button type="button" size="sm" variant="destructive"
+                              disabled={orderBusy || orderVoidName.trim() !== order.organizationName ||
+                                orderVoidReason.trim().length < 12 || orderVoidReason.trim().length > 350}
+                              onClick={() => void cancelSandboxDraft(order)}>
+                              {orderBusy ? "Invalidando…" : "Confirmar invalidação"}
+                            </Button>
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </>
           )}
