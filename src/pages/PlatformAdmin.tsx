@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   Building2, CalendarDays, ChevronLeft, ClipboardList, LockKeyhole,
-  LogOut, Search, ShieldCheck, Store, Users, Eye, Pencil, Save, Tag,
+  LogOut, Search, ShieldCheck, Store, Users, Eye, Pencil, Save, Tag, PauseCircle,
 } from "lucide-react";
 
 const STATUS: Record<string, string> = {
@@ -36,12 +36,72 @@ export default function PlatformAdmin() {
   const [planPrice, setPlanPrice] = useState("");
   const [savingPlan, setSavingPlan] = useState(false);
   const [planMessage, setPlanMessage] = useState("");
+  const [trialAction, setTrialAction] = useState<"" | "start" | "extend" | "suspend" | "resume">("");
+  const [trialDays, setTrialDays] = useState("7");
+  const [trialReason, setTrialReason] = useState("");
+  const [trialConfirmName, setTrialConfirmName] = useState("");
+  const [trialSaving, setTrialSaving] = useState(false);
+  const [trialMessage, setTrialMessage] = useState("");
+
   const organizationDetails = useQuery(
     api.platformAdmin.organizationDetails,
     allowed === true && selectedOrg ? { organizationId: selectedOrg } : "skip",
   );
   const drafts = useQuery(api.platformAdmin.planDrafts, allowed === true ? {} : "skip");
   const savePlanDraft = useMutation(api.platformAdmin.savePlanDraft);
+  const managePilotTrial = useMutation(api.platformAdmin.managePilotTrial);
+  const trialHistory = useQuery(
+    api.platformAdmin.pilotTrialHistory,
+    allowed === true && selectedOrg ? { organizationId: selectedOrg } : "skip",
+  );
+  const trialOptions = organizationDetails && !organizationDetails.isDemo &&
+    organizationDetails.source !== "billing"
+    ? organizationDetails.status === "unconfigured"
+      ? [{ value: "start", label: "Iniciar teste" }]
+      : organizationDetails.status === "trialing"
+        ? [{ value: "extend", label: "Prorrogar teste" }, { value: "suspend", label: "Suspender teste" }]
+        : organizationDetails.status === "suspended" && organizationDetails.source === "pilot" &&
+            organizationDetails.trialEndsAt !== null
+          ? [{ value: "resume", label: "Reativar como teste" }]
+          : []
+    : [];
+
+  function selectOrganization(id: Id<"organizations">) {
+    setSelectedOrg(id);
+    setTrialAction("");
+    setTrialDays("7");
+    setTrialReason("");
+    setTrialConfirmName("");
+    setTrialMessage("");
+  }
+
+  async function submitTrial(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!organizationDetails || !trialAction || trialSaving || !selectedOrg ||
+        !trialOptions.some(o => o.value === trialAction)) return;
+    setTrialSaving(true);
+    setTrialMessage("");
+    try {
+      await managePilotTrial({
+        organizationId: selectedOrg,
+        operation: trialAction,
+        confirmedName: trialConfirmName,
+        reason: trialReason,
+        days: trialAction === "suspend" ? undefined : Number(trialDays),
+        expectedEntitlementId: organizationDetails.entitlementId ?? undefined,
+        expectedUpdatedAt: organizationDetails.entitlementUpdatedAt ?? undefined,
+      });
+      setTrialMessage("Operação registrada no Convex com auditoria. Confira o novo status.");
+      setTrialAction("");
+      setTrialConfirmName("");
+      setTrialReason("");
+    } catch (err) {
+      setTrialMessage(err instanceof Error ? err.message : "Não foi possível atualizar o teste.");
+    } finally {
+      setTrialSaving(false);
+    }
+  }
+
 
   function resetPlanForm() {
     setEditingPlan(null);
@@ -217,7 +277,7 @@ export default function PlatformAdmin() {
                     <Badge variant="secondary">{STATUS[o.status] ?? o.status}</Badge>
                     {o.plan && <Badge variant="outline">Plano: {o.plan}</Badge>}
                     {o.status === "trialing" && <span className="text-xs text-muted-foreground">Até {fmt(o.trialEndsAt)}</span>}
-                    <Button type="button" size="sm" variant="outline" onClick={() => setSelectedOrg(o.id)}>
+                    <Button type="button" size="sm" variant="outline" onClick={() => selectOrganization(o.id)}>
                       <Eye className="size-3.5" /> Detalhes
                     </Button>
                   </div>
@@ -240,6 +300,7 @@ export default function PlatformAdmin() {
           ) : organizationDetails === undefined ? (
             <p className="mt-4 text-sm text-muted-foreground">Carregando informações…</p>
           ) : (
+            <>
             <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
               {[
                 ["Barbearia", organizationDetails.name],
@@ -260,6 +321,98 @@ export default function PlatformAdmin() {
                 </div>
               ))}
             </dl>
+
+            <div className="mt-6 border-t border-border/60 pt-5">
+              <h3 className="flex items-center gap-2 text-base font-semibold">
+                <PauseCircle className="size-5" /> Gestão de períodos de teste
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Ações exclusivas de pilotos: iniciar, prorrogar, suspender ou reativar testes.
+                Não altera planos pagos, não emite cobranças e não confirma pagamentos.
+              </p>
+              {!organizationDetails.commercialAccessEnforced && (
+                <p role="status" className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
+                  Atenção: o controle comercial de acesso está desativado neste deployment.
+                  Suspender um teste muda o registro, mas não bloqueia as edições da barbearia enquanto esse controle estiver desativado.
+                </p>
+              )}
+              {!organizationDetails.trialManagementEnabled ? (
+                <p className="mt-4 text-sm text-muted-foreground">
+                  Alterações manuais desabilitadas por padrão no servidor. É necessário habilitar
+                  BARBER_PLATFORM_TRIAL_ADMIN_WRITES exclusivamente no Convex de homologação.
+                </p>
+              ) : trialOptions.length === 0 ? (
+                <p className="mt-4 text-sm text-muted-foreground">
+                  Nenhuma ação manual permitida para esta unidade ou situação. Assinaturas originadas de cobrança permanecem protegidas.
+                </p>
+              ) : (
+                <form onSubmit={submitTrial} className="mt-4 grid gap-3 sm:grid-cols-2" aria-label="Gerenciar teste">
+                  <div>
+                    <label htmlFor="trial-action" className="mb-1 block text-sm font-medium">Ação</label>
+                    <select id="trial-action" required value={trialAction}
+                      onChange={e => { setTrialAction(e.target.value as typeof trialAction); setTrialMessage(""); }}
+                      className="glass-input h-10 w-full rounded-lg border px-3 text-sm">
+                      <option value="">Selecione uma ação</option>
+                      {trialOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  {trialAction !== "suspend" && trialAction !== "" && (
+                    <div>
+                      <label htmlFor="trial-days" className="mb-1 block text-sm font-medium">
+                        {trialAction === "extend" ? "Dias adicionais" : "Duração do teste (dias)"}
+                      </label>
+                      <Input id="trial-days" required type="number" min={1} max={30} step={1}
+                        value={trialDays} onChange={e => setTrialDays(e.target.value)} />
+                    </div>
+                  )}
+                  <div className="sm:col-span-2">
+                    <label htmlFor="trial-reason" className="mb-1 block text-sm font-medium">Justificativa obrigatória (12 a 350 caracteres)</label>
+                    <textarea id="trial-reason" required minLength={12} maxLength={350}
+                      value={trialReason} onChange={e => setTrialReason(e.target.value)}
+                      className="glass-input min-h-20 w-full rounded-lg border p-3 text-sm"
+                      placeholder="Ex.: Prorrogação autorizada para validar recursos da agenda" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label htmlFor="trial-confirm-name" className="mb-1 block text-sm font-medium">
+                      Digite o nome exato da barbearia para confirmar: <strong>{organizationDetails.name}</strong>
+                    </label>
+                    <Input id="trial-confirm-name" required value={trialConfirmName}
+                      onChange={e => setTrialConfirmName(e.target.value)} autoComplete="off" />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
+                    <Button type="submit" disabled={trialSaving || !trialAction ||
+                      trialConfirmName.trim() !== organizationDetails.name ||
+                      trialReason.trim().length < 12}>
+                      {trialSaving ? "Confirmando…" : "Confirmar alteração de teste"}
+                    </Button>
+                    <span className="text-xs text-muted-foreground">Alteração real no registro de acesso; reversível apenas por nova ação autorizada.</span>
+                  </div>
+                </form>
+              )}
+              {trialMessage && <p role="status" className="mt-3 text-sm text-muted-foreground">{trialMessage}</p>}
+              <div className="mt-5">
+                <h4 className="mb-2 text-sm font-semibold">Histórico de ações administrativas (últimos 20)</h4>
+                {trialHistory === undefined ? (
+                  <p className="text-sm text-muted-foreground">Carregando histórico…</p>
+                ) : trialHistory.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nenhuma alteração manual registrada.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {trialHistory.map(entry => (
+                      <li key={entry.id} className="rounded-xl border border-border/60 p-3 text-sm">
+                        <p className="font-medium">{entry.action.replace("pilot_trial_", "")} · {fmt(entry.createdAt)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {STATUS[entry.beforeStatus ?? ""] ?? entry.beforeStatus ?? "—"} → {STATUS[entry.afterStatus ?? ""] ?? entry.afterStatus ?? "—"}
+                          {" · "}Fim anterior: {fmt(entry.beforeTrialEndsAt)} · Novo fim: {fmt(entry.afterTrialEndsAt)}
+                        </p>
+                        {entry.reason && <p className="mt-1 whitespace-pre-wrap text-xs">{entry.reason}</p>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+            </>
           )}
         </section>
 
@@ -324,7 +477,7 @@ export default function PlatformAdmin() {
         <p className="pb-4 text-xs leading-relaxed text-muted-foreground">
           Painel técnico de homologação. Status de plano são registros do backend;
           não representam pagamentos confirmados, receita da plataforma ou assinaturas comerciais.
-          Somente rascunhos comerciais podem ser editados. Não há suporte remoto, alteração de acesso ou cobrança nesta versão.
+          O catálogo aceita rascunhos; o gestor de testes só opera com autorização adicional do servidor.\n          Não há cobrança, pagamentos confirmados ou suporte remoto nesta versão.
         </p>
       </div>
     </main>

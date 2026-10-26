@@ -83,6 +83,11 @@ export const overview = query({
 });
 
 /** Dados operacionais da unidade, sem cadastros de clientes ou funcionários. */
+function pilotTrialWritesEnabled(): boolean {
+  return process.env.BARBER_PLATFORM_TRIAL_ADMIN_WRITES === "true" &&
+    process.env.BARBER_BILLING_ENFORCED !== "true";
+}
+
 export const organizationDetails = query({
   args: { organizationId: v.id("organizations") },
   handler: async (ctx, { organizationId }) => {
@@ -106,6 +111,11 @@ export const organizationDetails = query({
       periodEndsAt: entitlement?.periodEndsAt ?? null,
       graceEndsAt: entitlement?.graceEndsAt ?? null,
       source: entitlement?.source ?? null,
+      entitlementId: entitlement?._id ?? null,
+      entitlementUpdatedAt: entitlement?.updatedAt ?? null,
+      trialManagementEnabled: pilotTrialWritesEnabled(),
+      commercialAccessEnforced: process.env.BARBER_AUTH_COMMERCIAL_ENABLED === "true" ||
+        process.env.BARBER_BILLING_ENFORCED === "true",
     };
   },
 });
@@ -169,5 +179,156 @@ export const savePlanDraft = mutation({
       createdAt: now,
     });
     return id;
+  },
+});
+
+
+/**
+ * Gestão manual de pilotos e períodos de teste, restrita à conta global.
+ * Não converte registros em assinaturas pagas nem interfere em fontes billing.
+ *
+ * Exige três confirmações do operador: feature flag privada, nome literal
+ * da unidade e revisão otimista do entitlement (ID e updatedAt).
+ * O status só restringe escritas das barbearias se o gate comercial estiver
+ * habilitado; esta função NÃO o habilita automaticamente.
+ */
+export const managePilotTrial = mutation({
+  args: {
+    organizationId: v.id("organizations"),
+    operation: v.union(
+      v.literal("start"), v.literal("extend"),
+      v.literal("suspend"), v.literal("resume"),
+    ),
+    confirmedName: v.string(),
+    reason: v.string(),
+    days: v.optional(v.number()),
+    expectedEntitlementId: v.optional(v.id("organizationEntitlements")),
+    expectedUpdatedAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    if (!pilotTrialWritesEnabled()) {
+      throw new HttpError("Gestão de testes desabilitada nas configurações privadas do Convex.");
+    }
+    const actorId = await getAuthUserId(ctx);
+    if (!actorId) throw new HttpError("Sessão inválida.");
+    const org = await ctx.db.get(args.organizationId);
+    if (!org || org.isDemo) throw new HttpError("Unidade inválida ou em modo demonstração.");
+    if (args.confirmedName.trim() !== org.name) {
+      throw new HttpError("Confirme o nome completo da barbearia antes de continuar.");
+    }
+    const reason = args.reason.trim();
+    if (reason.length < 12 || reason.length > 350) {
+      throw new HttpError("Informe uma justificativa de 12 a 350 caracteres.");
+    }
+
+    const existing = await ctx.db.query("organizationEntitlements")
+      .withIndex("by_org", q => q.eq("organizationId", org._id)).unique();
+    if (existing) {
+      if (existing._id !== args.expectedEntitlementId || existing.updatedAt !== args.expectedUpdatedAt) {
+        throw new HttpError("O status mudou desde a consulta. Recarregue os detalhes antes de confirmar.");
+      }
+      if (existing.source !== "pilot") {
+        throw new HttpError("Assinaturas originadas de cobrança não podem ser alteradas manualmente.");
+      }
+    } else if (args.expectedEntitlementId !== undefined || args.expectedUpdatedAt !== undefined) {
+      throw new HttpError("O status mudou desde a consulta. Recarregue os detalhes antes de confirmar.");
+    }
+
+    const now = Date.now();
+    // Versão estritamente crescente para detectar duas operações no mesmo milissegundo.
+    const nextVersion = Math.max(now, (existing?.updatedAt ?? 0) + 1);
+    const dayMs = 86_400_000;
+    const requiresDays = args.operation !== "suspend";
+    if (requiresDays) {
+      if (!Number.isSafeInteger(args.days) || args.days! < 1 || args.days! > 30) {
+        throw new HttpError("Escolha entre 1 e 30 dias de teste.");
+      }
+    } else if (args.days !== undefined) {
+      throw new HttpError("Suspensão não aceita dias de teste.");
+    }
+
+    if (args.operation === "start" && existing) {
+      throw new HttpError("A barbearia já possui uma configuração de acesso.");
+    }
+    if (args.operation === "extend" && (!existing || existing.status !== "trialing")) {
+      throw new HttpError("Apenas testes em andamento podem ser prorrogados.");
+    }
+    if (args.operation === "suspend" && (!existing || existing.status !== "trialing")) {
+      throw new HttpError("Somente testes em andamento podem ser suspensos.");
+    }
+    if (args.operation === "resume" && (!existing || existing.status !== "suspended" ||
+        typeof existing.trialEndsAt !== "number")) {
+      throw new HttpError("Apenas testes suspensos podem ser reativados.");
+    }
+    if (args.operation !== "start" && !existing) {
+      throw new HttpError("A barbearia ainda não possui um período de teste.");
+    }
+
+    const nextStatus: "trialing" | "suspended" =
+      args.operation === "suspend" ? "suspended" : "trialing";
+    const previousTrialEndsAt = existing?.trialEndsAt;
+    let nextTrialEndsAt = previousTrialEndsAt;
+    if (requiresDays) {
+      const base = args.operation === "extend"
+        ? Math.max(now, existing?.trialEndsAt ?? now) : now;
+      nextTrialEndsAt = base + args.days! * dayMs;
+      if (nextTrialEndsAt > now + 90 * dayMs) {
+        throw new HttpError("O término do teste não pode ultrapassar 90 dias a partir de hoje.");
+      }
+    }
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        status: nextStatus, trialEndsAt: nextTrialEndsAt, updatedAt: nextVersion,
+      });
+    } else {
+      await ctx.db.insert("organizationEntitlements", {
+        organizationId: org._id,
+        plan: "pilot",
+        status: "trialing",
+        source: "pilot",
+        trialEndsAt: nextTrialEndsAt!,
+        createdAt: now,
+        updatedAt: nextVersion,
+      });
+    }
+
+    await ctx.db.insert("platformAdminAuditLogs", {
+      actorId,
+      action: `pilot_trial_${args.operation}`,
+      recordType: "organizations",
+      recordId: org._id,
+      reason,
+      beforeStatus: existing?.status ?? "unconfigured",
+      afterStatus: nextStatus,
+      beforeTrialEndsAt: previousTrialEndsAt,
+      afterTrialEndsAt: nextTrialEndsAt,
+      createdAt: now,
+    });
+    return { status: nextStatus, trialEndsAt: nextTrialEndsAt ?? null };
+  },
+});
+
+/** Histórico limitado de ações manuais. Nunca devolve dados internos da unidade. */
+export const pilotTrialHistory = query({
+  args: { organizationId: v.id("organizations") },
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const org = await ctx.db.get(args.organizationId);
+    if (!org) throw new HttpError("Unidade não encontrada.");
+    const events = await ctx.db.query("platformAdminAuditLogs")
+      .withIndex("by_record", q => q.eq("recordType", "organizations")
+        .eq("recordId", args.organizationId))
+      .order("desc").take(20);
+    return events.map(event => ({
+      id: event._id,
+      action: event.action,
+      reason: event.reason ?? null,
+      beforeStatus: event.beforeStatus ?? null,
+      afterStatus: event.afterStatus ?? null,
+      beforeTrialEndsAt: event.beforeTrialEndsAt ?? null,
+      afterTrialEndsAt: event.afterTrialEndsAt ?? null,
+      createdAt: event.createdAt,
+    }));
   },
 });

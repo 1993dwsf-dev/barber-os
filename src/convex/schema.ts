@@ -670,8 +670,15 @@ const schema = defineSchema(
       action: v.string(),
       recordType: v.string(),
       recordId: v.string(),
+      reason: v.optional(v.string()),
+      beforeStatus: v.optional(v.string()),
+      afterStatus: v.optional(v.string()),
+      beforeTrialEndsAt: v.optional(v.number()),
+      afterTrialEndsAt: v.optional(v.number()),
       createdAt: v.number(),
-    }).index("by_created", ["createdAt"]),
+    })
+      .index("by_created", ["createdAt"])
+      .index("by_record", ["recordType", "recordId", "createdAt"]),
 
     /* ------------------------------ limites de uso / abuso ------------------------------ */
 
