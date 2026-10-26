@@ -204,3 +204,12 @@ A consulta exige `BARBER_ASAAS_ENV=sandbox`, `BARBER_ASAAS_LOOKUP_ENABLED=true`,
 **Ordem de deploy:** testes CI → Codespaces na branch v6 → confirmar `.env.local` aponta para `dev:unique-tortoise-387` → `bunx convex dev --once` → merge para `staging` → validar botões sem chave (desativados) → configurar variáveis privadas e testar com cobrança fictícia. Nunca publicar na `main` nesta etapa.
 
 Fontes: [Recuperar status de uma cobrança](https://docs.asaas.com/reference/recuperar-status-de-uma-cobranca), [Criar webhook pela aplicação](https://docs.asaas.com/docs/criar-novo-webhook-pela-aplicacao-web).
+
+
+## Correção v6.1 — diagnóstico de consulta Asaas bloqueada
+
+Quando **Consultar status** permanecer cinza, a interface administrativa agora lista os **seis critérios server-side**, indicando OK/Pendente para: ambiente sandbox; flag de consulta; não enforcement comercial; deployment Development esperado; existência da API key; formato mínimo da API key. Os critérios são compartilhados entre o retorno `platformAdmin.billingInbox` e a action `billingSandbox.checkPaymentStatus` para não exibirem resultados inconsistentes. Nunca são retornados valores, prefixos ou hashes de chaves de API.
+
+Se `BARBER_ASAAS_WEBHOOK_ENABLED=true` e os eventos chegarem, mas a consulta continuar bloqueada, o problema costuma ser **BARBER_ASAAS_LOOKUP_ENABLED** ou **BARBER_ASAAS_API_KEY** ausente no **mesmo deployment**. Não gere novas chaves até identificar o indicador Pendente. Somente o Admin global pode ler a verificação.
+
+Publicação segura: branch `fix/admin-asaas-lookup-diagnostics` -> `bunx convex dev --once` no Development `dev:unique-tortoise-387` -> merge `staging` após CI. O backend precisa ser atualizado primeiro porque a UI passa a ler `lookupChecks`.
