@@ -236,6 +236,8 @@ export const managePilotTrial = mutation({
     }
 
     const now = Date.now();
+    // Versão estritamente crescente para detectar duas operações no mesmo milissegundo.
+    const nextVersion = Math.max(now, (existing?.updatedAt ?? 0) + 1);
     const dayMs = 86_400_000;
     const requiresDays = args.operation !== "suspend";
     if (requiresDays) {
@@ -277,7 +279,7 @@ export const managePilotTrial = mutation({
     }
     if (existing) {
       await ctx.db.patch(existing._id, {
-        status: nextStatus, trialEndsAt: nextTrialEndsAt, updatedAt: now,
+        status: nextStatus, trialEndsAt: nextTrialEndsAt, updatedAt: nextVersion,
       });
     } else {
       await ctx.db.insert("organizationEntitlements", {
@@ -287,7 +289,7 @@ export const managePilotTrial = mutation({
         source: "pilot",
         trialEndsAt: nextTrialEndsAt!,
         createdAt: now,
-        updatedAt: now,
+        updatedAt: nextVersion,
       });
     }
 
