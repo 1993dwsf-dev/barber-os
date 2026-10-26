@@ -266,3 +266,8 @@ Mesmo se o status for `RECEIVED` e o valor coincidir, a **titularidade do client
 Ainda faltam checkout e criação de cliente/cobrança via backend, vínculo de titularidade não adulterável, preço negociado/contrato vigente, integração para valores descontados/parcelados, pagamentos recorrentes, devoluções/chargeback, idempotência financeira e restrição de acesso validada. **Não habilitar cobrança real, não liberar tenants por status isolado e não representar esta associação como assinatura paga.**
 
 Referência do Asaas: [Recuperar uma única cobrança](https://docs.asaas.com/reference/recuperar-uma-unica-cobranca).
+
+
+### Exportação CSV da associação Sandbox
+
+O Admin oferece `Exportar CSV` contendo apenas os até 50 vínculos recentes atualmente retornados pela API global administrativa. Usa UTF-8 com BOM, separador `;`, aspas escapadas, proteção contra **formula injection** no Excel e datas ISO. O arquivo inclui barbearia, ID da cobrança Sandbox, rascunho do plano, preço previsto e situação administrativa, com aviso explícito de que **não comprova receita nem concede acesso**. Nenhum dado de cliente Asaas, CPF ou token aparece.
