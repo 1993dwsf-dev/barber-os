@@ -395,6 +395,12 @@ export const billingInbox = query({
       .withIndex("by_received").order("desc").take(30);
     return {
       enabled: sandboxWebhookEnabled(),
+      lookupEnabled: process.env.BARBER_ASAAS_LOOKUP_ENABLED === "true" &&
+        process.env.BARBER_ASAAS_ENV === "sandbox" &&
+        process.env.BARBER_BILLING_ENFORCED !== "true" &&
+        process.env.CONVEX_CLOUD_URL?.replace(/\/$/, "") ===
+          "https://unique-tortoise-387.convex.cloud" &&
+        Boolean(process.env.BARBER_ASAAS_API_KEY?.trim()),
       items: events.map(e => ({
         id: e._id,
         eventId: e.eventId,
