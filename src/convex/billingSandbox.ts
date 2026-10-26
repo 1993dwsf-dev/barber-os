@@ -2,9 +2,9 @@ import { action } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { v } from "convex/values";
 import { HttpError } from "./lib";
+import { sandboxLookupAllowed } from "../lib/asaas-lookup-config";
 
 const SANDBOX_HOST = "https://api-sandbox.asaas.com";
-const DEV_DEPLOYMENT = "https://unique-tortoise-387.convex.cloud";
 const PAYMENT_ID = /^[a-zA-Z0-9_&-]{4,120}$/;
 const VALID_STATUS = /^[A-Z_]{3,48}$/;
 
@@ -22,10 +22,7 @@ export const checkPaymentStatus = action({
     environment: "sandbox";
   }> => {
     // Require both private flags AND the intended Convex development deployment.
-    if (process.env.BARBER_ASAAS_LOOKUP_ENABLED !== "true" ||
-        process.env.BARBER_ASAAS_ENV !== "sandbox" ||
-        process.env.BARBER_BILLING_ENFORCED === "true" ||
-        process.env.CONVEX_CLOUD_URL?.replace(/\/$/, "") !== DEV_DEPLOYMENT) {
+    if (!sandboxLookupAllowed()) {
       throw new HttpError("Consulta financeira Sandbox desabilitada neste ambiente.");
     }
 
