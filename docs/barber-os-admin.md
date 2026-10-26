@@ -213,3 +213,14 @@ Quando **Consultar status** permanecer cinza, a interface administrativa agora l
 Se `BARBER_ASAAS_WEBHOOK_ENABLED=true` e os eventos chegarem, mas a consulta continuar bloqueada, o problema costuma ser **BARBER_ASAAS_LOOKUP_ENABLED** ou **BARBER_ASAAS_API_KEY** ausente no **mesmo deployment**. Não gere novas chaves até identificar o indicador Pendente. Somente o Admin global pode ler a verificação.
 
 Publicação segura: branch `fix/admin-asaas-lookup-diagnostics` -> `bunx convex dev --once` no Development `dev:unique-tortoise-387` -> merge `staging` após CI. O backend precisa ser atualizado primeiro porque a UI passa a ler `lookupChecks`.
+
+
+## Ajuste v6.2 — uma linha por cobrança, eventos preservados
+
+A página Admin agrupa os eventos da caixa de entrada do Asaas Sandbox pelo `paymentId`. Uma cobrança que teve `PAYMENT_CREATED` e depois `PAYMENT_RECEIVED` aparece como **uma linha** com a última movimentação `Pagamento recebido`. O link **Ver histórico** mostra os dois eventos e suas datas, sem duplicar a cobrança no painel.
+
+O agrupamento é somente de apresentação no frontend, com ordenação por `receivedAt` e desempate estável por `eventId`. Nenhum evento da tabela `billingWebhookInbox` é eliminado ou sobrescrito. A consulta de status usa o registro mais recente da mesma cobrança; a exibição mantém o último resultado por `paymentId`, não por evento. Isso mantém a trilha de auditoria e a idempotência do recebimento dos webhooks.
+
+**Limite de exibição:** a consulta administrativa busca no máximo 30 **eventos**, que podem representar menos de 30 cobranças. O histórico de uma cobrança pode ser parcial quando eventos antigos estiverem fora desse limite. **A última movimentação recebida não substitui a consulta autenticada à API do Asaas e não significa conciliação bancária ou assinatura concedida.**
+
+Alteração exclusiva de frontend, utilitário e testes; não requer `bunx convex dev --once`.
