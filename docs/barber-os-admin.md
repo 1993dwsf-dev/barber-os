@@ -172,3 +172,35 @@ O relatório **não é uma exportação total da plataforma**: para mais de 75 u
 A etapa seguinte requer: vínculo seguro entre conta Asaas, barbearia e plano; criação de cliente/cobrança via API com credenciais do ambiente correto; reconciliação de cobrança consultando o provedor e o vencimento/valor contratados; idempotência no provisionamento; política de renovação, cancelamento, estorno, disputa, inadimplência e prazo de tolerância; garantias de privacidade e termos legais. **Nenhum desses controles é substituído por receber uma notificação `PAYMENT_RECEIVED`.**
 
 Referências oficiais: [Receber eventos](https://docs.asaas.com/docs/receba-eventos-do-asaas-no-seu-endpoint-de-webhook), [Idempotência](https://docs.asaas.com/docs/como-implementar-idempotencia-em-webhooks), [Sandbox](https://docs.asaas.com/docs/sandbox).
+
+
+## Etapa v6 — consulta pontual ao status de uma cobrança no Asaas Sandbox
+
+Após receber um evento na caixa de entrada da v5, o Admin pode consultar o **status atual** dessa cobrança pela API de testes do Asaas, desde que as configurações privadas estejam presentes. O provedor oferece oficialmente a operação `GET https://api-sandbox.asaas.com/v3/payments/{id}/status`.
+
+### Recursos implementados
+
+- Botão **Consultar status** ao lado de cada evento já armazenado na inbox. Não aceita IDs arbitrários fornecidos no formulário.
+- Action Convex protegida pela **mesma autenticação global verificada** do Admin, checada no servidor.
+- Consulta externa em host fixo `api-sandbox.asaas.com`, com `access_token` enviado somente no servidor.
+- Resposta mínima: ID de cobrança, status textual do Asaas, ambiente `sandbox` e horário da consulta.
+- Consulta transitória: **não persiste status nem dados de cliente, não altera assinatura, receita ou direito de acesso**.
+- Desabilitada por padrão, limitada por flags privadas e pelo URL do Convex Development `unique-tortoise-387`.
+- Não utilizar o status externo isolado como autorização comercial: ainda é preciso confirmar vínculo entre cobrança, contrato, valor, período e organização.
+
+### Configuração segura apenas na homologação
+
+Depois de ativar o webhook v5, configure no painel Convex do deployment `unique-tortoise-387`:
+
+```text
+BARBER_ASAAS_API_KEY=<chave gerada no Asaas Sandbox, SOMENTE no painel privado Convex>
+BARBER_ASAAS_LOOKUP_ENABLED=true
+```
+
+A **chave da API** serve exclusivamente para consultar o Asaas e **é diferente** do `BARBER_ASAAS_WEBHOOK_TOKEN`, que autentica os eventos de entrada. Nunca adicionar qualquer uma delas no frontend, Cloudflare Pages, `.env.example` com valor real, repositório ou conversa.
+
+A consulta exige `BARBER_ASAAS_ENV=sandbox`, `BARBER_ASAAS_LOOKUP_ENABLED=true`, `BARBER_BILLING_ENFORCED` diferente de `true`, deployment esperado e API key privada válida.
+
+**Ordem de deploy:** testes CI → Codespaces na branch v6 → confirmar `.env.local` aponta para `dev:unique-tortoise-387` → `bunx convex dev --once` → merge para `staging` → validar botões sem chave (desativados) → configurar variáveis privadas e testar com cobrança fictícia. Nunca publicar na `main` nesta etapa.
+
+Fontes: [Recuperar status de uma cobrança](https://docs.asaas.com/reference/recuperar-status-de-uma-cobranca), [Criar webhook pela aplicação](https://docs.asaas.com/docs/criar-novo-webhook-pela-aplicacao-web).
