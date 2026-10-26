@@ -1,6 +1,6 @@
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { api, internal } from "../src/convex/_generated/api";
+import { api } from "../src/convex/_generated/api";
 import schema from "../src/convex/schema";
 import type { Id } from "../src/convex/_generated/dataModel";
 import { defaultBusinessHours, defaultSettings } from "../src/convex/orgs";
