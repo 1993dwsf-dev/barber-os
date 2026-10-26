@@ -60,6 +60,22 @@ test("somente admin cria e edita rascunhos; não altera entitlement", async () =
   vi.stubEnv("BARBER_PLATFORM_ADMIN_USER_ID", admin.userId);
   vi.stubEnv("BARBER_PLATFORM_ADMIN_EMAIL", "admin@example.test");
 
+  // Prepara uma assinatura operacional real para detectar qualquer alteração acidental.
+  const baseline = await t.run(async (ctx) => {
+    const now = Date.now();
+    const orgId = await ctx.db.insert("organizations", {
+      name: "Barbearia em teste", ownerId: stranger.userId,
+      inviteCode: "TESTE-ISOLADO-INTERNO", isDemo: false,
+      businessHours: defaultBusinessHours(), settings: defaultSettings(),
+      salesCount: 0, createdAt: now, updatedAt: now,
+    });
+    await ctx.db.insert("organizationEntitlements", {
+      organizationId: orgId, plan: "pilot", status: "trialing",
+      source: "pilot", trialEndsAt: now + 86400000, createdAt: now, updatedAt: now,
+    });
+    return await ctx.db.query("organizationEntitlements").collect();
+  });
+
   await expect(stranger.caller.query(api.platformAdmin.planDrafts, {})).rejects.toThrow(/restrito/i);
   await expect(stranger.caller.mutation(api.platformAdmin.savePlanDraft, {
     name: "Pro", description: "Plano", priceCents: 9900,
@@ -84,7 +100,7 @@ test("somente admin cria e edita rascunhos; não altera entitlement", async () =
     entitlements: await ctx.db.query("organizationEntitlements").collect(),
     logs: await ctx.db.query("platformAdminAuditLogs").collect(),
   }));
-  expect(state.entitlements).toHaveLength(0);
+  expect(state.entitlements).toEqual(baseline);
   expect(state.logs.map(x => x.action)).toEqual(["plan_draft_created", "plan_draft_updated"]);
 });
 
