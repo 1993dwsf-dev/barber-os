@@ -164,19 +164,64 @@ describe("validação multiusuário em ambiente descartável", () => {
     expect(await employee.query(api.orgs.myOrganizations, {})).toEqual([]);
   });
 
-  test("ACHADO: antigo código de equipe ainda permite reentrada após remoção (não corrigido aqui)", async () => {
+  test("remoção invalida convite anterior, impede reentrada e permite novos convidados", async () => {
     const owner = await account("proprietario@example.test");
     const employee = await account("funcionario@example.test");
+    const retained = await account("ativo@example.test");
+    const newcomer = await account("novo@example.test");
     const orgId = await owner.mutation(api.orgs.createOrganization, { name: "Barbearia A" });
     const code = (await t.run(ctx => ctx.db.get(orgId)))!.inviteCode;
     await employee.mutation(api.orgs.joinByInviteCode, { code });
+    await retained.mutation(api.orgs.joinByInviteCode, { code });
     const member = (await owner.query(api.orgs.listMembers, { organizationId: orgId }))
       .find(m => m.email === "funcionario@example.test")!;
     await owner.mutation(api.orgs.removeMember, { organizationId: orgId, memberId: member._id });
-    // Este teste documenta o risco atual, não valida a segurança do convite.
+
+    const rotated = (await t.run(ctx => ctx.db.get(orgId)))!.inviteCode;
+    expect(rotated).toMatch(/^[A-Z0-9]{12}$/);
+    expect(rotated).not.toBe(code);
     expect(await employee.mutation(api.orgs.joinByInviteCode, { code }))
-      .toEqual({ ok: true, organizationId: orgId });
-    expect((await employee.query(api.orgs.getOrgContext, { organizationId: orgId })).member.role)
+      .toEqual({ ok: false, error: "Código de convite inválido." });
+    await expect(employee.query(api.orgs.getOrgContext, { organizationId: orgId }))
+      .rejects.toThrow(/não tem acesso/i);
+
+    // Um membro ainda ativo conserva o acesso sem precisar aceitar outro convite.
+    expect((await retained.query(api.orgs.getOrgContext, { organizationId: orgId })).member.role)
       .toBe("barber");
+    expect(await newcomer.mutation(api.orgs.joinByInviteCode, { code }))
+      .toEqual({ ok: false, error: "Código de convite inválido." });
+    expect(await newcomer.mutation(api.orgs.joinByInviteCode, { code: rotated }))
+      .toEqual({ ok: true, organizationId: orgId });
+
+    const members = await owner.query(api.orgs.listMembers, { organizationId: orgId });
+    expect(members.map(m => m.email).sort()).toEqual([
+      "ativo@example.test", "novo@example.test", "proprietario@example.test",
+    ]);
+  });
+
+  test("apenas proprietário da organização pode remover e girar seu convite", async () => {
+    const ownerA = await account("proprietario-a@example.test");
+    const ownerB = await account("proprietario-b@example.test");
+    const employeeA = await account("funcionario-a@example.test");
+    const orgA = await ownerA.mutation(api.orgs.createOrganization, { name: "Barbearia A" });
+    const orgB = await ownerB.mutation(api.orgs.createOrganization, { name: "Barbearia B" });
+    const initialA = (await t.run(ctx => ctx.db.get(orgA)))!.inviteCode;
+    const initialB = (await t.run(ctx => ctx.db.get(orgB)))!.inviteCode;
+    await employeeA.mutation(api.orgs.joinByInviteCode, { code: initialA });
+    const member = (await ownerA.query(api.orgs.listMembers, { organizationId: orgA }))
+      .find(m => m.email === "funcionario-a@example.test")!;
+
+    await expect(ownerB.mutation(api.orgs.removeMember, {
+      organizationId: orgA, memberId: member._id,
+    })).rejects.toThrow(/não tem acesso/i);
+    await expect(employeeA.mutation(api.orgs.removeMember, {
+      organizationId: orgA, memberId: member._id,
+    })).rejects.toThrow(/Apenas o proprietário/i);
+
+    expect((await t.run(ctx => ctx.db.get(orgA)))!.inviteCode).toBe(initialA);
+    expect((await t.run(ctx => ctx.db.get(orgB)))!.inviteCode).toBe(initialB);
+    await ownerA.mutation(api.orgs.removeMember, { organizationId: orgA, memberId: member._id });
+    expect((await t.run(ctx => ctx.db.get(orgA)))!.inviteCode).not.toBe(initialA);
+    expect((await t.run(ctx => ctx.db.get(orgB)))!.inviteCode).toBe(initialB);
   });
 });
