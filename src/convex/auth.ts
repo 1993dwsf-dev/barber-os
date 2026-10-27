@@ -4,7 +4,7 @@ import { Password } from "@convex-dev/auth/providers/Password";
 import Google from "@auth/core/providers/google";
 import { emailOtp } from "./auth/emailOtp";
 import { passwordReset, passwordVerification } from "./auth/passwordOtp";
-import { authorizeCurrentEmail } from "./auth/accessPolicy";
+import { authorizeCurrentEmail, authorizeCurrentGoogleEmail } from "./auth/accessPolicy";
 import { enabledAuthMethods } from "../lib/mvp-auth-config";
 
 /**
@@ -54,7 +54,7 @@ const googleProvider = Google({
     return {
       id: profile.sub,
       name: profile.name ?? undefined,
-      email: authorizeCurrentEmail(profile.email),
+      email: authorizeCurrentGoogleEmail(profile.email),
       // Sinal de verificação do Google só é aceito após checar email_verified === true.
       // Convex Auth utiliza este indicador para marcar o endereço como verificado.
       emailVerified: true,
