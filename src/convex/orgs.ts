@@ -15,6 +15,7 @@ import {
 } from "./lib";
 import { getCommercialStatus, isCommercialGateRequired } from "./commercial";
 import { APP_ROLES, type AppRole, type Cap } from "../lib/rbac";
+import { mayCreateHostedStagingOrganization } from "./auth/accessPolicy";
 import { clearRateLimit, consumeRateLimit, enforceRateLimit } from "./rateLimit";
 import { requiredText, text } from "./validation";
 import { seedDemoData } from "./seed";
@@ -299,6 +300,16 @@ export const createOrganization = mutation({
         "Para criar uma barbearia, confirme seu e-mail e use uma conta recuperável. " +
           "Você pode continuar explorando o modo de demonstração.",
       );
+    }
+    // Usuários convidados para teste via Google devem entrar na unidade
+    // existente. A conta extra não pode criar uma nova organização no sandbox.
+    if (!mayCreateHostedStagingOrganization(user.email, {
+      siteUrl: process.env.CONVEX_SITE_URL ?? "",
+      stagingEmail: process.env.BARBER_STAGING_EMAIL,
+      stagingGoogleEmails: process.env.BARBER_STAGING_GOOGLE_EMAILS,
+      commercialEnabled: process.env.BARBER_AUTH_COMMERCIAL_ENABLED === "true",
+    })) {
+      bad("Conta de funcionário de teste: use 'Tenho um convite' para entrar na barbearia.");
     }
 
     // Quando a autenticação comercial OU o paywall estiver habilitado,
