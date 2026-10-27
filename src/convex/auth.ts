@@ -5,6 +5,7 @@ import Google from "@auth/core/providers/google";
 import { emailOtp } from "./auth/emailOtp";
 import { passwordReset, passwordVerification } from "./auth/passwordOtp";
 import { authorizeCurrentEmail } from "./auth/accessPolicy";
+import { enabledAuthMethods } from "../lib/mvp-auth-config";
 
 /**
  * Migração gradual: o OTP continua disponível na homologação.
@@ -16,10 +17,13 @@ const localBackend = /^http:\/\/(localhost|127\.0\.0\.1):/.test(site);
 const authV2 = process.env.BARBER_AUTH_V2_ENABLED === "true";
 // Flag privada de produção/piloto: remove OTP, senha e modo anônimo como provedores.
 const googleOnly = process.env.BARBER_MVP_GOOGLE_ONLY === "true";
-const googleReady =
-  (authV2 || googleOnly) &&
-  process.env.BARBER_GOOGLE_AUTH_ENABLED === "true" &&
-  Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET);
+const enabled = enabledAuthMethods({
+  googleOnly,
+  authV2,
+  googleEnabled: process.env.BARBER_GOOGLE_AUTH_ENABLED === "true",
+  googleCredentials: Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET),
+  localBackend,
+});
 
 const passwordProvider = Password({
   reset: passwordReset,
@@ -61,9 +65,9 @@ const googleProvider = Google({
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [
-    ...(!googleOnly ? [emailOtp] : []),
-    ...(authV2 && !googleOnly ? [passwordProvider] : []),
-    ...(googleReady ? [googleProvider] : []),
-    ...(localBackend && !googleOnly ? [Anonymous] : []),
+    ...(enabled.otp ? [emailOtp] : []),
+    ...(enabled.password ? [passwordProvider] : []),
+    ...(enabled.google ? [googleProvider] : []),
+    ...(enabled.anonymous ? [Anonymous] : []),
   ],
 });
