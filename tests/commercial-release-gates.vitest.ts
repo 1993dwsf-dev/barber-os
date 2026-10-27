@@ -90,7 +90,7 @@ test("duas barbearias comerciais isolam clientes, agenda e exportação", async 
   })).rejects.toThrow(/não tem acesso/i);
   await expect(b.session.query(api.appointments.agenda, {
     organizationId: a.organizationId,
-    date: "2026-11-02",
+    from: "2026-11-02", to: "2026-11-02",
   })).rejects.toThrow(/não tem acesso/i);
   await expect(b.session.mutation(api.clients.remove, {
     organizationId: a.organizationId, clientId: clientA,
