@@ -51,6 +51,9 @@ const googleProvider = Google({
       id: profile.sub,
       name: profile.name ?? undefined,
       email: authorizeCurrentEmail(profile.email),
+      // Sinal de verificação do Google só é aceito após checar email_verified === true.
+      // Convex Auth utiliza este indicador para marcar o endereço como verificado.
+      emailVerified: true,
       image: profile.picture ?? undefined,
     };
   },
