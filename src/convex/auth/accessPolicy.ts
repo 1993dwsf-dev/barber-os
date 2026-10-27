@@ -92,7 +92,7 @@ export function mayCreateHostedStagingOrganization(
     commercialEnabled: boolean;
   },
 ): boolean {
-  if (config.commercialEnabled || /^http:\/\/(localhost|127\.0\.1|127\.0\.0\.1):/.test(config.siteUrl)) return true;
+  if (config.commercialEnabled || /^http:\/\/(localhost|127\.0\.0\.1):/.test(config.siteUrl)) return true;
   if (!(config.stagingGoogleEmails ?? "").trim()) return true;
   return email.trim().toLowerCase() === config.stagingEmail?.trim().toLowerCase();
 }
