@@ -14,8 +14,10 @@ import { authorizeCurrentEmail } from "./auth/accessPolicy";
 const site = process.env.CONVEX_SITE_URL ?? "";
 const localBackend = /^http:\/\/(localhost|127\.0\.0\.1):/.test(site);
 const authV2 = process.env.BARBER_AUTH_V2_ENABLED === "true";
+// Flag privada de produção/piloto: remove OTP, senha e modo anônimo como provedores.
+const googleOnly = process.env.BARBER_MVP_GOOGLE_ONLY === "true";
 const googleReady =
-  authV2 &&
+  (authV2 || googleOnly) &&
   process.env.BARBER_GOOGLE_AUTH_ENABLED === "true" &&
   Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET);
 
@@ -56,9 +58,9 @@ const googleProvider = Google({
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [
-    emailOtp,
-    ...(authV2 ? [passwordProvider] : []),
+    ...(!googleOnly ? [emailOtp] : []),
+    ...(authV2 && !googleOnly ? [passwordProvider] : []),
     ...(googleReady ? [googleProvider] : []),
-    ...(localBackend ? [Anonymous] : []),
+    ...(localBackend && !googleOnly ? [Anonymous] : []),
   ],
 });
