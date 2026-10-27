@@ -35,6 +35,22 @@ Nova autenticação protegida por flags, sem alterar a homologação atual por O
 
 Guia oficial: https://labs.convex.dev/auth/config/oauth/google
 
+## Teste fechado de múltiplos funcionários no deployment original
+
+**Somente na homologação `dev:unique-tortoise-387`, com contas fictícias.**
+O proprietário continua entrando com OTP no endereço `BARBER_STAGING_EMAIL`; **não apague nem substitua esta variável** e não migre a conta existente para o Google sem testar vinculação de identidade.
+
+1. Na aba **Development (Cloud) → Environment Variables** do projeto Convex original, mantenha `BARBER_AUTH_COMMERCIAL_ENABLED` ausente ou `false`, e `BARBER_MVP_GOOGLE_ONLY` ausente ou `false`. Ative `BARBER_AUTH_V2_ENABLED=true` e `BARBER_GOOGLE_AUTH_ENABLED=true` somente depois de cadastrar `AUTH_GOOGLE_ID` e `AUTH_GOOGLE_SECRET` neste mesmo deployment. Não exponha as credenciais.
+2. Configure **somente no Convex original** `BARBER_STAGING_GOOGLE_EMAILS` com **até 10 e-mails Google de teste separados por vírgulas**, sem incluir o e-mail do proprietário (já autorizado em `BARBER_STAGING_EMAIL`). O backend confere e-mail verificado no Google e a correspondência exata da allowlist, inclusive no callback. Sem a variável, continua funcionando a política anterior de um e-mail. **Não habilitar `BARBER_AUTH_COMMERCIAL_ENABLED=true` na homologação.**
+3. No Google Cloud Console, mantenha o Client OAuth Web Application e **Authorized JavaScript origins** `https://barber-os.pages.dev`; confira **Authorized redirect URI** `https://unique-tortoise-387.convex.site/api/auth/callback/google` (deve coincidir com o HTTP Actions URL real visto no Convex). Na tela de consentimento externa em Testing, adicione os mesmos endereços em **Test users**.
+4. No projeto Cloudflare Pages **original** `barber-os` (não `barber-os-piloto`), na área de **Production environment variables**, mantenha `VITE_CONVEX_URL=https://unique-tortoise-387.convex.cloud`, `VITE_STAGING_ONLY=true`; habilite `VITE_AUTH_V2_ENABLED=true` e `VITE_GOOGLE_AUTH_ENABLED=true`, mantendo `VITE_MVP_GOOGLE_ONLY` ausente ou `false`. Atualize/republique Pages para incorporar flags Vite; variáveis `VITE_*` são públicas e **jamais contêm segredos**.
+5. Na branch `staging`, com `.env.local` apontando para `dev:unique-tortoise-387`, execute `bunx convex dev --once` **apenas após validar as variáveis**. Não usar `bunx convex deploy`, `--prod` nem trocar o projeto.
+6. O proprietário entra **primeiro com OTP original** e confirma acesso à unidade. Abre **Configurações → Equipe → Código de convite** e fornece o código ao profissional fictício. O funcionário entra no mesmo endereço por **Google**, seleciona **Tenho um convite** e usa o código de equipe (4–12 caracteres). O proprietário deve associar o membro ao seu **cadastro de barbeiro** para habilitar o portal individual. Teste outro funcionário com perfil **Caixa**, acesso independente, bloqueio de funções administrativas, e remoção de um usuário fictício.
+7. Verifique que a remoção também **renova automaticamente o código da equipe**, rejeita o anterior e preserva o acesso dos membros ativos. O funcionário extra não pode **criar barbearia própria** na homologação: deve usar **Tenho um convite**. Sem vínculo profissional, o barbeiro vê portal não vinculado.
+8. Volte à conta do proprietário com OTP, confira integridade dos dados fictícios e registre resultados. **Não utilizar clientes reais** até passar por LGPD, backup restaurável e liberação comercial isolada.
+
+**Limitações deliberadas:** o Resend `@resend.dev` continua enviando códigos apenas ao e-mail autorizado; funcionários extras usam **Google**, não OTP/senha. Google/Convex Auth pode criar identidade distinta se alguém mudar de provedor; nunca testar troca do método de login da conta do proprietário com dados preexistentes. As flags de frontend devem ser testadas no Pages original antes do acesso dos funcionários.
+
 ## Migração segura do proprietário
 
 1. Antes de testes em dados existentes, confira no dashboard Convex o ID do usuário e o ownerId da organização. Não copie nem envie tokens ou segredos.
