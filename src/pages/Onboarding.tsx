@@ -18,6 +18,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useOrg } from "@/lib/org-context";
 import { useAuth } from "@/hooks/use-auth";
 
+const pilotGoogleOnly = import.meta.env.VITE_MVP_GOOGLE_ONLY === "true";
+
 const STEPS = [
   "Identidade da barbearia",
   "Horário de funcionamento",
@@ -52,6 +54,10 @@ export default function Onboarding() {
     setBusy(true);
     setError(null);
     try {
+      if (pilotGoogleOnly && !/^[0-9a-f]{64}$/.test(pilotInviteCode.trim().toLowerCase())) {
+        setError("Para criar sua barbearia no piloto, informe o convite exclusivo recebido.");
+        return;
+      }
       const orgId = await createOrganization({
         name,
         phone: phone || undefined,
@@ -138,7 +144,7 @@ export default function Onboarding() {
             </p>
           </div>
           <ol className="mt-2 flex flex-col gap-2">
-            {STEPS.map((s, i) => (
+            {(pilotGoogleOnly ? STEPS.filter((_, i) => [0, 1, 2, 3, 7].includes(i)) : STEPS).map((s, i) => (
               <li key={s} className="flex items-center gap-3 text-sm">
                 <span
                   className={`flex size-6 shrink-0 items-center justify-center rounded-lg text-[11px] font-semibold ${
@@ -173,7 +179,7 @@ export default function Onboarding() {
               [
                 { id: "create", label: "Criar barbearia" },
                 { id: "join", label: "Tenho um convite" },
-                { id: "demo", label: "Ver o demo" },
+                ...(!pilotGoogleOnly ? [{ id: "demo", label: "Ver o demo" } as const] : []),
               ] as const
             ).map((t) => (
               <button
@@ -251,7 +257,7 @@ export default function Onboarding() {
                 />
               </div>
               <div>
-                 <Label htmlFor="ob-pilot-code">Código de acesso ao piloto (se recebeu)</Label>
+                 <Label htmlFor="ob-pilot-code">Código de acesso ao piloto {pilotGoogleOnly ? "(obrigatório)" : "(se recebeu)"}</Label>
                  <Input
                    id="ob-pilot-code"
                    type="text"
@@ -262,6 +268,7 @@ export default function Onboarding() {
                    onChange={e => setPilotInviteCode(e.target.value.trim().toLowerCase())}
                    maxLength={64}
                    pattern="[0-9a-f]{64}"
+                   required={pilotGoogleOnly}
                    placeholder="Cole seu código exclusivo de acesso"
                    className="glass-input mt-1.5 font-mono text-xs"
                    disabled={busy}
@@ -272,6 +279,7 @@ export default function Onboarding() {
                  </p>
                </div>
                <Button type="submit" className="mt-2" disabled={busy || name.trim().length < 2 ||
+                 (pilotGoogleOnly && pilotInviteCode.length === 0) ||
                  (pilotInviteCode.length > 0 && !/^[0-9a-f]{64}$/.test(pilotInviteCode))}>
                 {busy ? <Loader2 className="size-4 animate-spin" /> : <Store className="size-4" />}
                 Criar barbearia

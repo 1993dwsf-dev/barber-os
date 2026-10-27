@@ -293,7 +293,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
 }
 
 export default function AuthPage(props: AuthProps) {
-  if (import.meta.env.VITE_AUTH_V2_ENABLED === "true") {
+  if (import.meta.env.VITE_AUTH_V2_ENABLED === "true" || import.meta.env.VITE_MVP_GOOGLE_ONLY === "true") {
     return <AuthV2 {...props} />;
   }
   return (

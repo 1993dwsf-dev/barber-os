@@ -5,6 +5,7 @@ import Google from "@auth/core/providers/google";
 import { emailOtp } from "./auth/emailOtp";
 import { passwordReset, passwordVerification } from "./auth/passwordOtp";
 import { authorizeCurrentEmail } from "./auth/accessPolicy";
+import { enabledAuthMethods } from "../lib/mvp-auth-config";
 
 /**
  * Migração gradual: o OTP continua disponível na homologação.
@@ -14,10 +15,15 @@ import { authorizeCurrentEmail } from "./auth/accessPolicy";
 const site = process.env.CONVEX_SITE_URL ?? "";
 const localBackend = /^http:\/\/(localhost|127\.0\.0\.1):/.test(site);
 const authV2 = process.env.BARBER_AUTH_V2_ENABLED === "true";
-const googleReady =
-  authV2 &&
-  process.env.BARBER_GOOGLE_AUTH_ENABLED === "true" &&
-  Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET);
+// Flag privada de produção/piloto: remove OTP, senha e modo anônimo como provedores.
+const googleOnly = process.env.BARBER_MVP_GOOGLE_ONLY === "true";
+const enabled = enabledAuthMethods({
+  googleOnly,
+  authV2,
+  googleEnabled: process.env.BARBER_GOOGLE_AUTH_ENABLED === "true",
+  googleCredentials: Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET),
+  localBackend,
+});
 
 const passwordProvider = Password({
   reset: passwordReset,
@@ -49,6 +55,9 @@ const googleProvider = Google({
       id: profile.sub,
       name: profile.name ?? undefined,
       email: authorizeCurrentEmail(profile.email),
+      // Sinal de verificação do Google só é aceito após checar email_verified === true.
+      // Convex Auth utiliza este indicador para marcar o endereço como verificado.
+      emailVerified: true,
       image: profile.picture ?? undefined,
     };
   },
@@ -56,9 +65,9 @@ const googleProvider = Google({
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [
-    emailOtp,
-    ...(authV2 ? [passwordProvider] : []),
-    ...(googleReady ? [googleProvider] : []),
-    ...(localBackend ? [Anonymous] : []),
+    ...(enabled.otp ? [emailOtp] : []),
+    ...(enabled.password ? [passwordProvider] : []),
+    ...(enabled.google ? [googleProvider] : []),
+    ...(enabled.anonymous ? [Anonymous] : []),
   ],
 });

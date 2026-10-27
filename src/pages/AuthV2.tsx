@@ -8,6 +8,8 @@ import { Link, useNavigate, useSearchParams } from "react-router";
 
 type Step = "signIn" | "signUp" | "verify" | "resetRequest" | "resetVerify" | "otpRequest" | "otpVerify";
 const googleEnabled = import.meta.env.VITE_GOOGLE_AUTH_ENABLED === "true";
+// Escopo limitado ao piloto. Login Google é a única opção visível, sem alterar a homologação.
+const googleOnly = import.meta.env.VITE_MVP_GOOGLE_ONLY === "true";
 const isStaging = import.meta.env.VITE_STAGING_ONLY === "true";
 
 function safeReturnTo(value: string | null, fallback: string) {
@@ -192,9 +194,11 @@ export default function AuthV2({ redirectAfterAuth = "/app" }: { redirectAfterAu
         <div className="mt-6 inline-flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
           <Scissors className="size-6" />
         </div>
-        <h1 className="mt-4 text-2xl font-semibold text-foreground">{titles[step]}</h1>
+        <h1 className="mt-4 text-2xl font-semibold text-foreground">{googleOnly ? "Entre no Barber OS" : titles[step]}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {step === "signIn" && "Entre com seu e-mail e senha ou continue com o Google."}
+          {step === "signIn" && (googleOnly
+            ? "Use sua conta Google. A criação de uma barbearia exige convite individual."
+            : "Entre com seu e-mail e senha ou continue com o Google.")}
           {step === "signUp" && "Seu e-mail será verificado antes do primeiro acesso."}
           {step === "resetRequest" && "Enviaremos um código para redefinir sua senha."}
           {step === "otpRequest" && "Use o código por e-mail durante a migração de contas existentes."}
@@ -203,7 +207,7 @@ export default function AuthV2({ redirectAfterAuth = "/app" }: { redirectAfterAu
 
         {error && <div role="alert" className="mt-4 rounded-xl bg-rose-500/10 p-3 text-sm text-rose-600">{error}</div>}
 
-        {(passwordStep || step === "otpRequest" || step === "resetRequest") && (
+        {!googleOnly && (passwordStep || step === "otpRequest" || step === "resetRequest") && (
           <form onSubmit={passwordStep ? handlePassword : step === "otpRequest" ? handleOtpRequest : handleResetRequest} className="mt-6 space-y-4">
             <div>
               <label htmlFor="login-email" className="mb-1.5 block text-xs font-medium">E-mail</label>
@@ -231,7 +235,7 @@ export default function AuthV2({ redirectAfterAuth = "/app" }: { redirectAfterAu
           </form>
         )}
 
-        {codeStep && (
+        {!googleOnly && codeStep && (
           <form className="mt-6 space-y-4" onSubmit={step === "verify" ? handleVerify : step === "resetVerify" ? handleResetVerify : handleOtpVerify}>
             <div>
               <label htmlFor="auth-code" className="mb-1.5 block text-xs font-medium">Código de verificação</label>
@@ -250,16 +254,26 @@ export default function AuthV2({ redirectAfterAuth = "/app" }: { redirectAfterAu
           </form>
         )}
 
-        {step === "signIn" && googleEnabled && (
+        {(googleOnly || (step === "signIn" && googleEnabled)) && googleEnabled && (
           <div className="mt-5">
-            <div className="mb-4 flex items-center gap-3 text-xs text-muted-foreground"><span className="h-px flex-1 bg-border" />ou<span className="h-px flex-1 bg-border" /></div>
+            {!googleOnly && (
+              <div className="mb-4 flex items-center gap-3 text-xs text-muted-foreground">
+                <span className="h-px flex-1 bg-border" />ou<span className="h-px flex-1 bg-border" />
+              </div>
+            )}
             <Button type="button" className="w-full" variant="outline" disabled={busy} onClick={handleGoogle}>
               <span aria-hidden="true" className="text-base font-bold">G</span> Entrar com Google
             </Button>
           </div>
         )}
 
-        <div className="mt-5 flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs">
+        {googleOnly && !googleEnabled && (
+          <p role="alert" className="mt-6 rounded-xl border border-destructive/30 p-3 text-sm text-destructive">
+            Login Google indisponível neste ambiente. Solicite suporte ao administrador.
+          </p>
+        )}
+
+        {!googleOnly && <div className="mt-5 flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs">
           {step === "signIn" && <>
             <button type="button" className="text-primary hover:underline" onClick={() => move("signUp")}>Criar conta</button>
             <button type="button" className="text-primary hover:underline" onClick={() => move("resetRequest")}>Esqueci minha senha</button>
@@ -268,11 +282,17 @@ export default function AuthV2({ redirectAfterAuth = "/app" }: { redirectAfterAu
           {step !== "signIn" && <button type="button" className="text-primary hover:underline" onClick={() => move("signIn")}>Voltar para entrar</button>}
           {step === "verify" && <button type="button" className="text-primary hover:underline" onClick={() => move("signUp")}>Solicitar novo código</button>}
           {step === "resetVerify" && <button type="button" className="text-primary hover:underline" onClick={() => move("resetRequest")}>Solicitar outro código</button>}
-        </div>
+        </div>}
 
-        {isStaging && (
+        {isStaging && !googleOnly && (
           <p className="mt-6 rounded-xl bg-amber-500/10 p-3 text-center text-xs text-muted-foreground">
             Ambiente de homologação: acesso restrito ao e-mail autorizado. Não utilize dados reais de clientes.
+          </p>
+        )}
+        {googleOnly && (
+          <p className="mt-6 rounded-xl bg-primary/5 p-3 text-center text-xs text-muted-foreground">
+            Piloto fechado. Entre com o e-mail Google que recebeu o convite da plataforma.
+            O acesso à barbearia só é concedido depois de validar seu convite.
           </p>
         )}
       </div>
