@@ -491,11 +491,18 @@ export const removeMember = mutation({
       if (owners.length <= 1) bad("A organização precisa de pelo menos um proprietário.");
     }
     if (target._id === me._id) bad("Você não pode remover a si mesmo.");
+    // Revoga o membro e invalida o código compartilhado numa única transação.
+    // Sem essa rotação, a mesma conta pode retornar com o convite que já conhece.
     await ctx.db.delete(memberId);
+    const nextInviteCode = randomCode();
+    await ctx.db.patch(organizationId, {
+      inviteCode: nextInviteCode,
+      updatedAt: Date.now(),
+    });
     await audit(ctx, organizationId, me.userId, {
       action: "removeu",
       module: "Equipe",
-      summary: `Membro removido (${target.role})`,
+      summary: `Membro removido (${target.role}); código de convite da equipe renovado`,
     });
   },
 });
