@@ -284,9 +284,15 @@ export default function AuthV2({ redirectAfterAuth = "/app" }: { redirectAfterAu
           {step === "resetVerify" && <button type="button" className="text-primary hover:underline" onClick={() => move("resetRequest")}>Solicitar outro código</button>}
         </div>}
 
-        {isStaging && (
+        {isStaging && !googleOnly && (
           <p className="mt-6 rounded-xl bg-amber-500/10 p-3 text-center text-xs text-muted-foreground">
             Ambiente de homologação: acesso restrito ao e-mail autorizado. Não utilize dados reais de clientes.
+          </p>
+        )}
+        {googleOnly && (
+          <p className="mt-6 rounded-xl bg-primary/5 p-3 text-center text-xs text-muted-foreground">
+            Piloto fechado. Entre com o e-mail Google que recebeu o convite da plataforma.
+            O acesso à barbearia só é concedido depois de validar seu convite.
           </p>
         )}
       </div>
