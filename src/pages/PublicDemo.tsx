@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import {
   ArrowLeft, ArrowRight, CalendarDays, ChartColumnIncreasing, CheckCircle2,
-  ClipboardList, Package, RotateCcw, Scissors, ShoppingCart, Users, Wallet,
+  ClipboardList, Package, RotateCcw, Scissors, ShoppingCart, Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
