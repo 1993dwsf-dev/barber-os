@@ -98,7 +98,7 @@ export async function recordSale(
       .withIndex("by_org_appointment", q =>
         q.eq("organizationId", org._id).eq("appointmentId", appointment!._id),
       ).first();
-    if (previousSale) bad("Este atendimento já possui uma venda registrada.");
+    if (previousSale?.status === "concluida") bad("Este atendimento já possui uma venda registrada.");
 
     if (args.clientId !== appointment.clientId || args.barberId !== appointment.barberId)
       bad("Cliente ou barbeiro não confere com o agendamento.");
