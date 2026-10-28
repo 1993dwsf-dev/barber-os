@@ -30,7 +30,8 @@ export const bundle = query({
       .query("sales")
       .withIndex("by_org_date", (q) => q.eq("organizationId", args.organizationId))
       .collect();
-    const sales = allSales.filter((s) => s.date >= args.from && s.date <= args.to).sort((a, b) =>
+    // O histórico cancelado permanece no PDV/auditoria; não compõe receita nem CSV financeiro.
+    const sales = allSales.filter((s) => s.status === "concluida" && s.date >= args.from && s.date <= args.to).sort((a, b) =>
       b.date.localeCompare(a.date),
     );
 
