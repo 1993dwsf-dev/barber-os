@@ -30,7 +30,8 @@ export const dashboard = query({
       .withIndex("by_org_date", (q) => q.eq("organizationId", args.organizationId))
       .order("desc")
       .take(600);
-    const sales = [...allSales].reverse();
+    // Vendas canceladas permanecem para auditoria, mas não entram em KPIs ou gráficos.
+    const sales = [...allSales].reverse().filter(s => s.status === "concluida");
 
     // itens + pagamentos de cada venda
     const saleData: SaleRow[] = [];

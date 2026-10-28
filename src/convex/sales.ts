@@ -94,11 +94,12 @@ export async function recordSale(
 
     // Protege também registros legados com venda vinculada, mesmo se
     // os campos saleId/status do agendamento estiverem desatualizados.
-    const previousSale = await ctx.db.query("sales")
+    const previousSales = await ctx.db.query("sales")
       .withIndex("by_org_appointment", q =>
         q.eq("organizationId", org._id).eq("appointmentId", appointment!._id),
-      ).first();
-    if (previousSale) bad("Este atendimento já possui uma venda registrada.");
+      ).collect();
+    if (previousSales.some(sale => sale.status === "concluida"))
+      bad("Este atendimento já possui uma venda registrada.");
 
     if (args.clientId !== appointment.clientId || args.barberId !== appointment.barberId)
       bad("Cliente ou barbeiro não confere com o agendamento.");
@@ -440,6 +441,127 @@ export const createSale = mutation({
       summary: `Venda #${(await ctx.db.get(result.saleId))?.number} — R$ ${(result.totalCents / 100).toFixed(2)}`,
     });
     return result;
+  },
+});
+
+
+/**
+ * Cancela um lançamento errado sem apagar a trilha financeira.
+ * Rejeita situações que não podem ser revertidas contabilmente com segurança.
+ * Não realiza estorno bancário/cartão: esse procedimento é externo ao Barber OS.
+ */
+export const cancelSale = mutation({
+  args: {
+    organizationId: v.id("organizations"),
+    saleId: v.id("sales"),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { org, userId } = await requireManage(ctx, args.organizationId, "pos");
+    const reason = args.reason.trim();
+    if (reason.length < 10 || reason.length > 300)
+      bad("Informe o motivo do cancelamento (10 a 300 caracteres).");
+    const sale = await ctx.db.get(args.saleId);
+    if (!sale || sale.organizationId !== org._id) bad("Venda não encontrada nesta barbearia.");
+    if (sale.status !== "concluida") bad("Esta venda já foi cancelada.");
+
+    const items = await ctx.db.query("saleItems")
+      .withIndex("by_sale", q => q.eq("saleId", sale._id)).collect();
+    const commissions = await ctx.db.query("commissions")
+      .withIndex("by_sale", q => q.eq("saleId", sale._id)).collect();
+    if (commissions.some(c => c.status !== "pendente"))
+      bad("A venda tem comissão aprovada ou paga. Regularize a comissão antes de cancelar.");
+
+    const cashMoves = await ctx.db.query("cashMovements")
+      .withIndex("by_org", q => q.eq("organizationId", org._id)).collect();
+    const saleCash = cashMoves.filter(m => m.saleId === sale._id && m.type === "venda");
+    for (const move of saleCash) {
+      const session = await ctx.db.get(move.sessionId);
+      if (!session || session.status !== "aberto")
+        bad("A venda pertence a um caixa fechado. Solicite ajuste contábil ao responsável.");
+    }
+    const earned = sale.clientId
+      ? await ctx.db.query("loyaltyTransactions")
+          .withIndex("by_org_client", q => q.eq("organizationId", org._id).eq("clientId", sale.clientId!))
+          .collect()
+      : [];
+    const fromSale = earned.filter(t => t.saleId === sale._id && t.type === "ganho");
+    const points = fromSale.reduce((sum, t) => sum + t.points, 0);
+    const loyaltyAccount = sale.clientId && points > 0
+      ? await ctx.db.query("loyaltyAccounts")
+          .withIndex("by_org_client", q => q.eq("organizationId", org._id).eq("clientId", sale.clientId!)).unique()
+      : null;
+    if (points && (!loyaltyAccount || loyaltyAccount.points < points))
+      bad("Pontos desta venda já foram utilizados. Regularize a fidelidade antes de cancelar.");
+
+    // A transação Convex é atômica: ou todos os efeitos são revertidos, ou nenhum.
+    const now = Date.now();
+    for (const item of items) {
+      if (item.kind === "produto" && item.productId) {
+        const product = await ctx.db.get(item.productId);
+        if (!product || product.organizationId !== org._id)
+          bad("Produto da venda não existe mais; cancelamento manual necessário.");
+        await ctx.db.patch(product._id, { stock: product.stock + item.quantity, updatedAt: now });
+        await ctx.db.insert("inventoryMovements", {
+          organizationId: org._id, productId: product._id, date: todayISO(),
+          quantity: item.quantity, type: "devolucao", saleId: sale._id,
+          reference: `Cancelamento venda #${sale.number}`, notes: reason, userId: userId as Id<"users">, createdAt: now,
+        });
+      }
+    }
+    for (const move of saleCash) {
+      await ctx.db.insert("cashMovements", {
+        organizationId: org._id, sessionId: move.sessionId, type: "estorno",
+        amountCents: move.amountCents, description: `Cancelamento venda #${sale.number}: ${reason}`,
+        date: todayISO(), userId: userId as Id<"users">, saleId: sale._id, createdAt: now,
+      });
+    }
+    for (const commission of commissions) await ctx.db.delete(commission._id);
+    if (sale.appointmentId) {
+      const appointment = await ctx.db.get(sale.appointmentId);
+      if (appointment?.organizationId === org._id && appointment.saleId === sale._id)
+        await ctx.db.patch(appointment._id, {
+          saleId: undefined, status: "agendado", paymentStatus: "nao_pago", updatedAt: now,
+        });
+    }
+    if (sale.clientId) {
+      const client = await ctx.db.get(sale.clientId);
+      if (client?.organizationId === org._id) {
+        const hasService = items.some(i => i.kind === "servico");
+        const otherSales = await ctx.db.query("sales")
+          .withIndex("by_org_client", q => q.eq("organizationId", org._id).eq("clientId", client._id))
+          .collect();
+        const otherLastVisit = otherSales
+          .filter(s => s._id !== sale._id && s.status === "concluida")
+          .reduce((latest, s) => s.date > latest ? s.date : latest, "");
+        await ctx.db.patch(client._id, {
+          totalSpentCents: Math.max(0, client.totalSpentCents - sale.totalCents),
+          totalVisits: Math.max(0, client.totalVisits - (hasService ? 1 : 0)),
+          lastVisitDate: client.lastVisitDate === sale.date ? (otherLastVisit || undefined) : client.lastVisitDate,
+          updatedAt: now,
+        });
+      }
+      if (points && loyaltyAccount) {
+        await ctx.db.patch(loyaltyAccount._id, {
+          points: loyaltyAccount.points - points,
+          totalEarned: Math.max(0, loyaltyAccount.totalEarned - points),
+        });
+        await ctx.db.insert("loyaltyTransactions", {
+          organizationId: org._id, clientId: sale.clientId,
+          type: "ajuste", points: -points,
+          reason: `Estorno da venda #${sale.number}: ${reason}`,
+          saleId: sale._id, date: todayISO(), createdAt: now,
+        });
+      }
+    }
+    await ctx.db.patch(sale._id, {
+      status: "cancelada", notes: [sale.notes, `Cancelada: ${reason}`].filter(Boolean).join(" — "),
+    });
+    await audit(ctx, org._id, userId, {
+      action: "cancelou", module: "PDV", recordType: "sales",
+      recordId: sale._id, summary: `Venda #${sale.number} cancelada: ${reason}`,
+    });
+    return { canceled: true };
   },
 });
 
