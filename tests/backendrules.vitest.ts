@@ -1189,3 +1189,53 @@ test("perfil de caixa autorizado pode cancelar venda sem estorno externo", async
     .withIndex("by_org", q => q.eq("organizationId", owner.orgId)).collect());
   expect(audit.some(a => a.recordId === sale.saleId && a.action === "cancelou" && a.userId === cashier.userId)).toBe(true);
 });
+
+
+/* ------------------------------ backup / portabilidade por organização ------------------------------ */
+
+test("exportação JSON inclui apenas a unidade autenticada, usuários mínimos e auditoria", async () => {
+  const ownerA = await seedOwner("export-a@barbearia.test");
+  const ownerB = await seedOwner("export-b@barbearia.test");
+  await ownerA.t2.mutation(api.clients.create, {
+    organizationId: ownerA.orgId, name: "Cliente Fictício A", phone: "11999990001",
+  });
+  await ownerB.t2.mutation(api.clients.create, {
+    organizationId: ownerB.orgId, name: "Cliente Fictício B", phone: "11999990002",
+  });
+  const doc = await ownerA.t2.mutation(api.backup.exportOrganizationData, {
+    organizationId: ownerA.orgId,
+  });
+  expect(doc.organization._id).toBe(ownerA.orgId);
+  expect(doc.counts.clients).toBe(1);
+  expect(doc.truncated).toEqual([]);
+  const clients = doc.data.clients as Array<{ organizationId: Id<"organizations">; name: string }>;
+  expect(clients.map(c => c.organizationId)).toEqual([ownerA.orgId]);
+  expect(clients.map(c => c.name)).toEqual(["Cliente Fictício A"]);
+  expect(doc.users).toHaveLength(1);
+  expect(doc.users[0]._id).toBe(ownerA.userId);
+  expect(Object.keys(doc.users[0]).sort()).toEqual(["_id", "email", "name"]);
+
+  const audits = await t.run(ctx => ctx.db.query("auditLogs")
+    .withIndex("by_org", q => q.eq("organizationId", ownerA.orgId)).collect());
+  expect(audits.filter(a => a.action === "exportou" && a.module === "Configurações" && a.userId === ownerA.userId)).toHaveLength(1);
+  const auditsB = await t.run(ctx => ctx.db.query("auditLogs")
+    .withIndex("by_org", q => q.eq("organizationId", ownerB.orgId)).collect());
+  expect(auditsB.filter(a => a.action === "exportou")).toHaveLength(0);
+
+  await expect(ownerB.t2.mutation(api.backup.exportOrganizationData, {
+    organizationId: ownerA.orgId,
+  })).rejects.toThrow(/não tem acesso/i);
+});
+
+test("visitante, barbeiro e caixa não podem exportar dados JSON", async () => {
+  const owner = await seedOwner("export-permission@barbearia.test");
+  for (const role of ["viewer", "barber", "cashier"] as const) {
+    const staff = await seedStaff(owner, role);
+    await expect(staff.t2.mutation(api.backup.exportOrganizationData, {
+      organizationId: owner.orgId,
+    })).rejects.toThrow(/sem permissão/i);
+  }
+  const audits = await t.run(ctx => ctx.db.query("auditLogs")
+    .withIndex("by_org", q => q.eq("organizationId", owner.orgId)).collect());
+  expect(audits.filter(a => a.action === "exportou")).toHaveLength(0);
+});
