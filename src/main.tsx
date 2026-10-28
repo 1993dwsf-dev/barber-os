@@ -12,6 +12,7 @@ import "./index.css";
 import { OrgProvider, useOrg } from "@/lib/org-context";
 
 const Landing = lazy(() => import("./pages/Landing.tsx"));
+const PublicDemo = lazy(() => import("./pages/PublicDemo.tsx"));
 const AuthPage = lazy(() => import("./pages/Auth.tsx"));
 const Onboarding = lazy(() => import("./pages/Onboarding.tsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
@@ -124,6 +125,7 @@ createRoot(document.getElementById("root")!).render(
           <Suspense fallback={<RouteLoading />}>
             <Routes>
               <Route path="/" element={<Landing />} />
+              <Route path="/demo" element={<PublicDemo />} />
               <Route
                 path="/auth"
                 element={<AuthPage redirectAfterAuth="/app" />}
