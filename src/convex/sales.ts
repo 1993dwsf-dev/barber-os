@@ -503,8 +503,8 @@ export const cancelSale = mutation({
         await ctx.db.patch(product._id, { stock: product.stock + item.quantity, updatedAt: now });
         await ctx.db.insert("inventoryMovements", {
           organizationId: org._id, productId: product._id, date: todayISO(),
-          quantity: item.quantity, type: "devolucao", saleId: sale._id, userId,
-          reference: `Cancelamento venda #${sale.number}`, notes: reason, createdAt: now,
+          quantity: item.quantity, type: "devolucao", saleId: sale._id,
+          reference: `Cancelamento venda #${sale.number}`, notes: reason, userId: userId as Id<"users">, createdAt: now,
         });
       }
     }
@@ -512,7 +512,7 @@ export const cancelSale = mutation({
       await ctx.db.insert("cashMovements", {
         organizationId: org._id, sessionId: move.sessionId, type: "estorno",
         amountCents: move.amountCents, description: `Cancelamento venda #${sale.number}: ${reason}`,
-        date: todayISO(), userId, saleId: sale._id, createdAt: now,
+        date: todayISO(), userId: userId as Id<"users">, saleId: sale._id, createdAt: now,
       });
     }
     for (const commission of commissions) await ctx.db.delete(commission._id);
