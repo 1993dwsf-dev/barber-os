@@ -68,3 +68,40 @@ test("modo exclusivamente Google contradiz a autenticação escolhida para o pil
   expect(result.checks.find(x => x.id === "password-login")?.passed).toBe(false);
   expect(result.checks.find(x => x.id === "google-disabled")?.passed).toBe(false);
 });
+
+
+test("deployment de desenvolvimento diferente do original não é aceito em ambiente comercial", () => {
+  const result = evaluateCommercialConfig({
+    ...valid,
+    CONVEX_DEPLOYMENT: "dev:new-pilot-deployment",
+  });
+  expect(result.checks.find(c => c.id === "isolated-convex")?.passed).toBe(false);
+  expect(result.configurationReady).toBe(false);
+});
+
+test("deployment de produção ausente ou divergente do URL Convex falha fechado", () => {
+  for (const deployment of [undefined, "", "prod:outro-deployment", "prod:new-pilot-deployment|secret"]) {
+    const result = evaluateCommercialConfig({ ...valid, CONVEX_DEPLOYMENT: deployment });
+    expect(result.checks.find(c => c.id === "isolated-convex")?.passed).toBe(false);
+  }
+});
+
+test("site comercial não pode apontar para o Cloudflare Pages de homologação", () => {
+  for (const site of [
+    "https://barber-os.pages.dev",
+    "https://barber-os-piloto.pages.dev",
+    "https://abc123.barber-os.pages.dev",
+    "https://preview.barber-os-piloto.pages.dev",
+  ]) {
+    const result = evaluateCommercialConfig({ ...valid, SITE_URL: site });
+    expect(result.checks.find(c => c.id === "public-url")?.passed).toBe(false);
+    expect(result.configurationReady).toBe(false);
+  }
+});
+
+test("site comercial separado no domínio gratuito pages.dev continua permitido", () => {
+  const result = evaluateCommercialConfig(valid);
+  expect(result.checks.find(c => c.id === "public-url")?.passed).toBe(true);
+  expect(result.checks.find(c => c.id === "isolated-convex")?.passed).toBe(true);
+  expect(result.configurationReady).toBe(true);
+});

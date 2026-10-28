@@ -44,19 +44,36 @@ export function evaluateCommercialConfig(env: CommercialEnv) {
     /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email) &&
     !email.endsWith("@resend.dev");
   const convexUrl = env.CONVEX_SITE_URL?.trim().toLowerCase() ?? "";
-  const originalDev = "https://unique-tortoise-387.convex.site";
+  const deployment = env.CONVEX_DEPLOYMENT?.trim().toLowerCase() ?? "";
+  // Nunca aceitar chave de DEV, deploy ausente ou endpoint da homologação.
+  // O nome do deployment é parte pública do endereço Convex HTTP Actions.
+  const prodMatch = /^prod:([a-z0-9]+(?:-[a-z0-9]+)*)$/.exec(deployment);
+  const isolatedConvex = !!prodMatch &&
+    convexUrl === `https://${prodMatch[1]}.convex.site` &&
+    prodMatch[1] !== "unique-tortoise-387" &&
+    validHttps(convexUrl, ".convex.site");
+
+  // Cloudflare Pages pode ser usado sem domínio próprio, desde que seja um
+  // projeto comercial NOVO. Proibir URLs do projeto de homologação/piloto,
+  // incluindo suas prévias *.pages.dev.
+  const isIsolatedFrontend = (() => {
+    if (!validHttps(env.SITE_URL)) return false;
+    const url = new URL(env.SITE_URL!);
+    const hostname = url.hostname.toLowerCase();
+    return !["barber-os.pages.dev", "barber-os-piloto.pages.dev"]
+      .some(host => hostname === host || hostname.endsWith("." + host));
+  })();
+
   const checks: LaunchCheck[] = [
     {
       id: "isolated-convex",
-      passed: validHttps(convexUrl, ".convex.site") &&
-        convexUrl !== originalDev &&
-        !/(^|[:/])dev:unique-tortoise-387\b/i.test(env.CONVEX_DEPLOYMENT ?? ""),
-      description: "Usar deployment Convex separado do Development original.",
+      passed: isolatedConvex,
+      description: "Exigir CONVEX_DEPLOYMENT=prod:... com URL correspondente e distinta da homologação.",
     },
     {
       id: "public-url",
-      passed: validHttps(env.SITE_URL),
-      description: "SITE_URL deve conter endereço HTTPS do frontend comercial.",
+      passed: isIsolatedFrontend,
+      description: "SITE_URL deve ser HTTPS de site novo e não pode reutilizar projetos Pages da homologação.",
     },
     {
       id: "commercial-invitations",
