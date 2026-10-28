@@ -915,3 +915,108 @@ test("proprietário pode modificar e desfazer vínculos sem expor o perfil de ou
     organizationId: owner.orgId, memberId: otherMember._id, barberId: secondProfile,
   })).rejects.toThrow(/outra unidade|não encontrado|Membro/i);
 });
+
+
+/* ------------------------------ cancelamento auditável ------------------------------ */
+
+test("cancelamento retira receita do dashboard e relatórios, preserva venda e evita cancelamento duplo", async () => {
+  const owner = await seedOwner();
+  const { serviceId, barberId, clientId } = await seedCatalog(owner);
+  const result = await owner.t2.mutation(api.sales.createSale, {
+    organizationId: owner.orgId, clientId, barberId,
+    items: [{ kind: "servico", refId: serviceId, qty: 1, barberId }],
+    payments: [{ method: "pix", amountCents: 5000 }],
+  });
+  const before = await owner.t2.query(api.dashboard.dashboard, { organizationId: owner.orgId });
+  expect(before.kpis.revenueMonth).toBe(5000);
+  const cancelled = await owner.t2.mutation(api.sales.cancelSale, {
+    organizationId: owner.orgId, saleId: result.saleId, reason: "Venda lançada por engano",
+  });
+  expect(cancelled.canceled).toBe(true);
+  const sale = await t.run(ctx => ctx.db.get(result.saleId));
+  expect(sale?.status).toBe("cancelada");
+  const client = await t.run(ctx => ctx.db.get(clientId));
+  expect(client?.totalSpentCents).toBe(0);
+  expect(client?.totalVisits).toBe(0);
+  const dashboard = await owner.t2.query(api.dashboard.dashboard, { organizationId: owner.orgId });
+  expect(dashboard.kpis.revenueToday).toBe(0);
+  expect(dashboard.kpis.revenueMonth).toBe(0);
+  expect(dashboard.kpis.salesCountMonth).toBe(0);
+  const report = await owner.t2.query(api.reports.bundle, {
+    organizationId: owner.orgId, from: sale!.date, to: sale!.date,
+  });
+  expect(report.summary.revenueCents).toBe(0);
+  expect(report.summary.salesCount).toBe(0);
+  const pdv = await owner.t2.query(api.sales.listSales, { organizationId: owner.orgId });
+  expect(pdv.find(s => s._id === result.saleId)?.status).toBe("cancelada");
+  await expect(owner.t2.mutation(api.sales.cancelSale, {
+    organizationId: owner.orgId, saleId: result.saleId, reason: "Tentativa de cancelar duas vezes",
+  })).rejects.toThrow(/já foi cancelada/i);
+});
+
+test("cancelamento de produto em dinheiro recompõe estoque e lança estorno no caixa aberto", async () => {
+  const owner = await seedOwner();
+  const productId = await owner.t2.mutation(api.products.create, {
+    organizationId: owner.orgId, name: "Pomada Teste", category: "Pomadas",
+    costCents: 1000, priceCents: 2600, stock: 5, minStock: 1,
+  });
+  await owner.t2.mutation(api.cash.openSession, {
+    organizationId: owner.orgId, openingBalanceCents: 1000,
+  });
+  const result = await owner.t2.mutation(api.sales.createSale, {
+    organizationId: owner.orgId,
+    items: [{ kind: "produto", refId: productId, qty: 1 }],
+    payments: [{ method: "dinheiro", amountCents: 2600 }],
+  });
+  expect((await t.run(ctx => ctx.db.get(productId)))?.stock).toBe(4);
+  const before = await owner.t2.query(api.cash.currentSession, { organizationId: owner.orgId });
+  expect(before?.expectedCents).toBe(3600);
+  await owner.t2.mutation(api.sales.cancelSale, {
+    organizationId: owner.orgId, saleId: result.saleId, reason: "Produto lançado indevidamente",
+  });
+  expect((await t.run(ctx => ctx.db.get(productId)))?.stock).toBe(5);
+  const after = await owner.t2.query(api.cash.currentSession, { organizationId: owner.orgId });
+  expect(after?.expectedCents).toBe(1000);
+  expect(after?.todayByMethod.dinheiro).toBe(0);
+  expect(after?.movements.filter(m => m.saleId === result.saleId).map(m => m.type).sort())
+    .toEqual(["estorno", "venda"]);
+  const movements = await t.run(ctx => ctx.db.query("inventoryMovements")
+    .withIndex("by_org_product", q => q.eq("organizationId", owner.orgId).eq("productId", productId))
+    .collect());
+  expect(movements.some(m => m.saleId === result.saleId && m.type === "devolucao")).toBe(true);
+});
+
+test("cancelamento é bloqueado após fechar caixa e mantém venda contabilizada", async () => {
+  const owner = await seedOwner();
+  const { serviceId } = await seedCatalog(owner);
+  await owner.t2.mutation(api.cash.openSession, {
+    organizationId: owner.orgId, openingBalanceCents: 0,
+  });
+  const sale = await owner.t2.mutation(api.sales.createSale, {
+    organizationId: owner.orgId,
+    items: [{ kind: "servico", refId: serviceId, qty: 1 }],
+    payments: [{ method: "dinheiro", amountCents: 5000 }],
+  });
+  await owner.t2.mutation(api.cash.closeSession, {
+    organizationId: owner.orgId, countedCents: 5000,
+  });
+  await expect(owner.t2.mutation(api.sales.cancelSale, {
+    organizationId: owner.orgId, saleId: sale.saleId, reason: "Correção após fechamento",
+  })).rejects.toThrow(/caixa fechado/i);
+  expect((await t.run(ctx => ctx.db.get(sale.saleId)))?.status).toBe("concluida");
+});
+
+test("outro proprietário não pode cancelar venda de outra barbearia", async () => {
+  const ownerA = await seedOwner("owner-a@barbearia.test");
+  const { serviceId } = await seedCatalog(ownerA);
+  const ownerB = await seedOwner("owner-b@barbearia.test");
+  const sale = await ownerA.t2.mutation(api.sales.createSale, {
+    organizationId: ownerA.orgId,
+    items: [{ kind: "servico", refId: serviceId, qty: 1 }],
+    payments: [{ method: "pix", amountCents: 5000 }],
+  });
+  await expect(ownerB.t2.mutation(api.sales.cancelSale, {
+    organizationId: ownerB.orgId, saleId: sale.saleId, reason: "Venda de outra barbearia",
+  })).rejects.toThrow(/não encontrada/i);
+  expect((await t.run(ctx => ctx.db.get(sale.saleId)))?.status).toBe("concluida");
+});
