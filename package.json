@@ -11,6 +11,7 @@
     "test:backend": "vitest run",
     "loadtest": "bun run scripts/loadtest.ts",
     "check:schema": "bun run scripts/by-org-check.ts",
+    "check:commercial": "bun run scripts/check-commercial-readiness.ts",
     "format": "prettier --write .",
     "preview": "vite preview",
     "build:pages": "node scripts/check-pages-env.mjs && bun run build"
