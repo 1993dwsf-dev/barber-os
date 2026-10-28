@@ -94,11 +94,12 @@ export async function recordSale(
 
     // Protege também registros legados com venda vinculada, mesmo se
     // os campos saleId/status do agendamento estiverem desatualizados.
-    const previousSale = await ctx.db.query("sales")
+    const previousSales = await ctx.db.query("sales")
       .withIndex("by_org_appointment", q =>
         q.eq("organizationId", org._id).eq("appointmentId", appointment!._id),
-      ).first();
-    if (previousSale?.status === "concluida") bad("Este atendimento já possui uma venda registrada.");
+      ).collect();
+    if (previousSales.some(sale => sale.status === "concluida"))
+      bad("Este atendimento já possui uma venda registrada.");
 
     if (args.clientId !== appointment.clientId || args.barberId !== appointment.barberId)
       bad("Cliente ou barbeiro não confere com o agendamento.");
@@ -527,9 +528,16 @@ export const cancelSale = mutation({
       const client = await ctx.db.get(sale.clientId);
       if (client?.organizationId === org._id) {
         const hasService = items.some(i => i.kind === "servico");
+        const otherSales = await ctx.db.query("sales")
+          .withIndex("by_org_client", q => q.eq("organizationId", org._id).eq("clientId", client._id))
+          .collect();
+        const otherLastVisit = otherSales
+          .filter(s => s._id !== sale._id && s.status === "concluida")
+          .reduce((latest, s) => s.date > latest ? s.date : latest, "");
         await ctx.db.patch(client._id, {
           totalSpentCents: Math.max(0, client.totalSpentCents - sale.totalCents),
           totalVisits: Math.max(0, client.totalVisits - (hasService ? 1 : 0)),
+          lastVisitDate: client.lastVisitDate === sale.date ? (otherLastVisit || undefined) : client.lastVisitDate,
           updatedAt: now,
         });
       }
