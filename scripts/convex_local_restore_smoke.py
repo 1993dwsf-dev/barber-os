@@ -1,7 +1,7 @@
 """Ensaio de exportação/restauração Convex exclusivamente em backend LOCAL descartável.
 
 NUNCA executar contra dados hospedados. Este script aborta sem uma .env.local
-que ateste deployment local/anônimo E URL loopback, e usa --deployment local.
+que ateste deployment anônimo/local E URL loopback, sem seletor remoto.
 O snapshot temporário só contém os dados fictícios do browser smoke.
 """
 from __future__ import annotations
@@ -38,20 +38,27 @@ def assert_local_only():
             raise RuntimeError(f"Proteção: {key} presente; restauração recusada")
 
 def run_convex(*args: str):
-    # Nenhuma opção para --prod, nenhum deployment remoto aceito.
-    if args[0] not in ("export", "import") or "--deployment" not in args:
+    # O modo Convex anônimo utiliza o backend local indicado em .env.local
+    # como deployment padrão. NUNCA passar --prod ou seletor remoto.
+    assert_local_only()
+    if args[0] not in ("export", "import") or any(
+        flag in args for flag in ("--prod", "--deployment", "--preview-name", "--preview-create")
+    ):
         raise RuntimeError("Comando de backup fora da lista autorizada")
-    i = args.index("--deployment")
-    if args[i + 1] != "local":
-        raise RuntimeError("Destino diferente de local, operação recusada")
     result = subprocess.run(
         ["bunx", "convex", *args],
         cwd=ROOT, text=True, capture_output=True, timeout=180, check=False,
     )
     if result.returncode:
-        # Não imprimir dados do snapshot nem informações sensíveis.
-        raise RuntimeError(f"convex {args[0]} local falhou com código {result.returncode}")
-
+        # Logar somente diagnóstico de erro, sem documentos do snapshot.
+        messages = [
+            line[:250] for line in (result.stdout + "\n" + result.stderr).splitlines()
+            if any(w in line.lower() for w in ("error", "failed", "unknown", "anonymous", "deployment"))
+        ]
+        raise RuntimeError(
+            f"convex {args[0]} anônimo local falhou (código {result.returncode}): " +
+            " | ".join(messages[-4:])[:700]
+        )
 
 def document_index(zip_path: pathlib.Path):
     result = {}
@@ -76,14 +83,14 @@ def main():
         backup = root / "antes.zip"
         verified = root / "depois.zip"
         print("[restore QA] exportando dados fictícios do Convex local", flush=True)
-        run_convex("export", "--deployment", "local", "--include-file-storage", "--path", str(backup))
+        run_convex("export", "--include-file-storage", "--path", str(backup))
         before = document_index(backup)
         if len(before.get("sales", [])) < 1 or len(before.get("appointments", [])) < 1:
             raise AssertionError("O ambiente fictício não possui vendas e agendamentos para o ensaio")
-        # Única mutação do ensaio: --replace em LOCAL (nunca remoto).
+        # Única mutação do ensaio: --replace no backend ANÔNIMO LOCAL (nunca remoto).
         assert_local_only()
-        run_convex("import", "--deployment", "local", "--replace", "--yes", str(backup))
-        run_convex("export", "--deployment", "local", "--include-file-storage", "--path", str(verified))
+        run_convex("import", "--replace", "--yes", str(backup))
+        run_convex("export", "--include-file-storage", "--path", str(verified))
         after = document_index(verified)
         if before != after:
             diff = sorted(set(before) | set(after))
