@@ -133,10 +133,29 @@ function PdvForm({
       : "skip",
   );
   const createSale = useMutation(api.sales.createSale);
+  const cancelSale = useMutation(api.sales.cancelSale);
+  const [cancelingId, setCancelingId] = useState<string | null>(null);
   const recent = useQuery(
     api.sales.listSales,
     orgId ? { organizationId: orgId, limit: 12 } : "skip",
   );
+
+  async function cancelMistakenSale(saleId: Id<"sales">, number: number) {
+    if (!orgId || cancelingId) return;
+    const reason = window.prompt(`Motivo do cancelamento da venda #${number} (mínimo 10 caracteres):`);
+    if (reason === null) return;
+    if (reason.trim().length < 10) { toast.error("Descreva o motivo com pelo menos 10 caracteres."); return; }
+    if (!window.confirm(`Cancelar venda #${number}? Isso reverterá estoque, comissão pendente, fidelidade e caixa quando permitido. Não estorna Pix/cartão automaticamente.`)) return;
+    setCancelingId(saleId);
+    try {
+      await cancelSale({ organizationId: orgId, saleId, reason: reason.trim() });
+      toast.success(`Venda #${number} cancelada. Confira eventual estorno externo.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível cancelar a venda.");
+    } finally {
+      setCancelingId(null);
+    }
+  }
 
   const methods = org?.settings.activePaymentMethods ?? ["pix"];
   const t = term.toLowerCase();
@@ -369,6 +388,15 @@ function PdvForm({
                     <span className="text-[13px] font-semibold tabular-nums text-foreground">
                       {brl(s.totalCents)}
                     </span>
+                    {s.status === "cancelada" ? (
+                      <span className="text-xs text-muted-foreground">Cancelada</span>
+                    ) : (
+                      <Button type="button" size="sm" variant="outline"
+                        disabled={cancelingId !== null}
+                        onClick={() => void cancelMistakenSale(s._id, s.number)}>
+                        {cancelingId === s._id ? "Cancelando…" : "Cancelar"}
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ul>
