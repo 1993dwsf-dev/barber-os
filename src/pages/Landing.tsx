@@ -183,7 +183,7 @@ export default function Landing() {
               </Button>
             </motion.div>
             <motion.p variants={fade} custom={4} className="mt-4 text-xs text-muted-foreground">
-              Ou entre como visitante e conheça o ambiente demo com dados de exemplo.
+              Conheça uma demonstração interativa com dados fictícios, sem precisar fazer login.
             </motion.p>
           </motion.div>
 
@@ -390,7 +390,7 @@ export default function Landing() {
                   variant="outline"
                   className="h-11 rounded-xl bg-white/60 px-6"
                 >
-                  <Link to="/auth">Ver ambiente demo</Link>
+                  <Link to="/demo">Ver demonstração interativa</Link>
                 </Button>
               </div>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
