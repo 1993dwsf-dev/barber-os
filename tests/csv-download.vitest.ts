@@ -38,7 +38,9 @@ describe("download de CSV para Excel", () => {
     const blob = createObjectURL.mock.calls[0]?.[0] as Blob;
     expect(blob).toBeInstanceOf(Blob);
     expect(blob.type).toBe("text/csv;charset=utf-8");
-    expect(await blob.text()).toBe("\uFEFFData;Valor\r\n28/10/2026;45,00");
+    expect(Array.from(new Uint8Array(await blob.arrayBuffer()).slice(0, 3))).toEqual([0xef, 0xbb, 0xbf]);
+    // Blob.text() decodifica e remove o BOM, embora os bytes estejam presentes.
+    expect(await blob.text()).toBe("Data;Valor\r\n28/10/2026;45,00");
     expect(revokeObjectURL).not.toHaveBeenCalled();
     expect(cleanup).toBeTypeOf("function");
     cleanup?.();
