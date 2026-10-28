@@ -19,6 +19,15 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -135,20 +144,32 @@ function PdvForm({
   const createSale = useMutation(api.sales.createSale);
   const cancelSale = useMutation(api.sales.cancelSale);
   const [cancelingId, setCancelingId] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<{ saleId: Id<"sales">; number: number } | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
   const recent = useQuery(
     api.sales.listSales,
     orgId ? { organizationId: orgId, limit: 12 } : "skip",
   );
 
-  async function cancelMistakenSale(saleId: Id<"sales">, number: number) {
+  function prepareCancelSale(saleId: Id<"sales">, number: number) {
     if (!orgId || cancelingId) return;
-    const reason = window.prompt(`Motivo do cancelamento da venda #${number} (mínimo 10 caracteres):`);
-    if (reason === null) return;
-    if (reason.trim().length < 10) { toast.error("Descreva o motivo com pelo menos 10 caracteres."); return; }
-    if (!window.confirm(`Cancelar venda #${number}? Isso reverterá estoque, comissão pendente, fidelidade e caixa quando permitido. Não estorna Pix/cartão automaticamente.`)) return;
+    setCancelReason("");
+    setCancelTarget({ saleId, number });
+  }
+
+  async function confirmCancelSale() {
+    if (!orgId || !cancelTarget || cancelingId) return;
+    const reason = cancelReason.trim();
+    if (reason.length < 10 || reason.length > 300) {
+      toast.error("Informe um motivo de cancelamento com 10 a 300 caracteres.");
+      return;
+    }
+    const { saleId, number } = cancelTarget;
     setCancelingId(saleId);
     try {
-      await cancelSale({ organizationId: orgId, saleId, reason: reason.trim() });
+      await cancelSale({ organizationId: orgId, saleId, reason });
+      setCancelTarget(null);
+      setCancelReason("");
       toast.success(`Venda #${number} cancelada. Confira eventual estorno externo.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível cancelar a venda.");
@@ -393,7 +414,7 @@ function PdvForm({
                     ) : canEdit("pos") ? (
                       <Button type="button" size="sm" variant="outline"
                         disabled={cancelingId !== null}
-                        onClick={() => void cancelMistakenSale(s._id, s.number)}>
+                        onClick={() => prepareCancelSale(s._id, s.number)}>
                         {cancelingId === s._id ? "Cancelando…" : "Cancelar"}
                       </Button>
                     ) : null}
@@ -675,6 +696,59 @@ return (
           </section>
         </div>
       </div>
+
+      <Dialog
+        open={cancelTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !cancelingId) {
+            setCancelTarget(null);
+            setCancelReason("");
+          }
+        }}
+      >
+        <DialogContent
+          onEscapeKeyDown={(event) => { if (cancelingId) event.preventDefault(); }}
+          onPointerDownOutside={(event) => { if (cancelingId) event.preventDefault(); }}
+        >
+          <DialogHeader>
+            <DialogTitle>Cancelar venda #{cancelTarget?.number}</DialogTitle>
+            <DialogDescription>
+              O cancelamento reverte o estoque, as comissões pendentes, a fidelidade
+              e os lançamentos do caixa quando permitido. Pagamentos por Pix ou
+              cartão não são estornados automaticamente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Label htmlFor="pdv-cancel-reason">Motivo do cancelamento</Label>
+            <Textarea
+              id="pdv-cancel-reason"
+              placeholder="Explique por que esta venda precisa ser cancelada"
+              value={cancelReason}
+              onChange={(event) => setCancelReason(event.target.value)}
+              minLength={10}
+              maxLength={300}
+              rows={3}
+              disabled={cancelingId !== null}
+              aria-describedby="pdv-cancel-reason-help"
+            />
+            <p id="pdv-cancel-reason-help" className="text-xs text-muted-foreground">
+              Obrigatório: 10 a 300 caracteres ({cancelReason.trim().length}/300).
+            </p>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline"
+              disabled={cancelingId !== null}
+              onClick={() => { setCancelTarget(null); setCancelReason(""); }}>
+              Voltar
+            </Button>
+            <Button type="button" variant="destructive"
+              disabled={cancelingId !== null || cancelReason.trim().length < 10 || cancelReason.trim().length > 300}
+              onClick={() => void confirmCancelSale()}>
+              {cancelingId !== null ? "Cancelando venda…" : "Confirmar cancelamento"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
