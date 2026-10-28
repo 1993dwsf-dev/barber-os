@@ -107,7 +107,7 @@ function PdvForm({
   checkout: LinkedCheckout | null;
   onClear: () => void;
 }) {
-  const { orgId, org } = useOrg();
+  const { orgId, org, canEdit } = useOrg();
   const [term, setTerm] = useState("");
   const [cart, setCart] = useState<CartLine[]>(() => checkout && checkout.service && checkout.barber ? [{
     key: `appointment-${checkout.appointment._id}`,
@@ -390,13 +390,13 @@ function PdvForm({
                     </span>
                     {s.status === "cancelada" ? (
                       <span className="text-xs text-muted-foreground">Cancelada</span>
-                    ) : (
+                    ) : canEdit("pos") ? (
                       <Button type="button" size="sm" variant="outline"
                         disabled={cancelingId !== null}
                         onClick={() => void cancelMistakenSale(s._id, s.number)}>
                         {cancelingId === s._id ? "Cancelando…" : "Cancelar"}
                       </Button>
-                    )}
+                    ) : null}
                   </li>
                 ))}
               </ul>
