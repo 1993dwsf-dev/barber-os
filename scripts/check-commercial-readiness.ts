@@ -9,7 +9,9 @@ const names: (keyof CommercialEnv)[] = [
   "CONVEX_SITE_URL", "CONVEX_DEPLOYMENT", "SITE_URL",
   "BARBER_AUTH_COMMERCIAL_ENABLED", "BARBER_BILLING_ENFORCED",
   "BARBER_AUTH_V2_ENABLED", "BARBER_GOOGLE_AUTH_ENABLED", "BARBER_MVP_GOOGLE_ONLY",
-  "RESEND_API_KEY", "RESEND_FROM_EMAIL", "JWT_PRIVATE_KEY", "JWKS",
+  "RESEND_API_KEY", "RESEND_FROM_EMAIL",
+  "BARBER_EMAIL_PROVIDER", "BREVO_API_KEY", "BREVO_FROM_EMAIL",
+  "JWT_PRIVATE_KEY", "JWKS",
 ];
 const env = Object.fromEntries(names.map(name => [name, process.env[name]])) as CommercialEnv;
 const result = evaluateCommercialConfig(env);

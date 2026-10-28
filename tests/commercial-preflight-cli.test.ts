@@ -47,3 +47,32 @@ test("CLI bloqueia frontend de homologação e deployment de desenvolvimento", (
   expect(result.stdout).toContain("Configuração básica bloqueada");
   expect(result.stdout).not.toContain(fake.RESEND_API_KEY);
 });
+
+
+test("CLI usa Brevo selecionado e não precisa de chaves do Resend", () => {
+  const env = {
+    ...fake,
+    BARBER_EMAIL_PROVIDER: "brevo",
+    BREVO_API_KEY: "BREVO_PRIVATE_SENTINEL_98765",
+    BREVO_FROM_EMAIL: "Barber OS <teste@gmail.com>",
+    RESEND_API_KEY: "",
+    RESEND_FROM_EMAIL: "",
+  };
+  const result = check(env);
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain("PASS  email-delivery");
+  expect(result.stdout).toContain("verificação independente");
+  expect(result.stdout).not.toContain(env.BREVO_API_KEY);
+  expect(result.stdout).not.toContain(env.BREVO_FROM_EMAIL);
+});
+
+test("CLI Brevo sem credenciais recusa liberação mesmo com Resend configurado", () => {
+  const result = check({
+    ...fake,
+    BARBER_EMAIL_PROVIDER: "brevo",
+    BREVO_API_KEY: "",
+    BREVO_FROM_EMAIL: "",
+  });
+  expect(result.status).toBe(1);
+  expect(result.stdout).toContain("FAIL  email-delivery");
+});

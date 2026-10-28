@@ -13,6 +13,9 @@ export type CommercialEnv = {
   BARBER_MVP_GOOGLE_ONLY?: string;
   RESEND_API_KEY?: string;
   RESEND_FROM_EMAIL?: string;
+  BARBER_EMAIL_PROVIDER?: string;
+  BREVO_API_KEY?: string;
+  BREVO_FROM_EMAIL?: string;
   SITE_URL?: string;
   CONVEX_SITE_URL?: string;
   CONVEX_DEPLOYMENT?: string;
@@ -38,9 +41,14 @@ export function evaluateCommercialConfig(env: CommercialEnv) {
       return false;
     }
   };
-  const from = (env.RESEND_FROM_EMAIL ?? "").trim();
+  const provider = (env.BARBER_EMAIL_PROVIDER ?? "resend").trim().toLowerCase() || "resend";
+  const supportedProvider = provider === "resend" || provider === "brevo";
+  const selectedKey = provider === "brevo" ? env.BREVO_API_KEY : env.RESEND_API_KEY;
+  const from = (provider === "brevo" ? env.BREVO_FROM_EMAIL : env.RESEND_FROM_EMAIL)?.trim() ?? "";
   const email = (from.match(/<([^<>]+)>$/)?.[1] ?? from).trim().toLowerCase();
-  const verifiedSenderCandidate =
+  // Candidatura sintática: somente um teste real comprova remetente aprovado e entrega.
+  // O Brevo pode reescrever remetentes gratuitos para um domínio técnico.
+  const senderCandidate =
     /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email) &&
     !email.endsWith("@resend.dev");
   const convexUrl = env.CONVEX_SITE_URL?.trim().toLowerCase() ?? "";
@@ -83,7 +91,7 @@ export function evaluateCommercialConfig(env: CommercialEnv) {
     {
       id: "enforced-entitlements",
       passed: env.BARBER_BILLING_ENFORCED === "true",
-      description: "Exigir entitlement válido antes de operações de escrita.",
+      description: "Exigir prazo de acesso válido; não processa pagamentos das assinaturas.",
     },
     {
       id: "password-login",
@@ -98,8 +106,8 @@ export function evaluateCommercialConfig(env: CommercialEnv) {
     },
     {
       id: "email-delivery",
-      passed: !!env.RESEND_API_KEY?.trim() && verifiedSenderCandidate,
-      description: "Configurar API Resend e remetente de domínio próprio, nunca @resend.dev.",
+      passed: supportedProvider && !!selectedKey?.trim() && senderCandidate,
+      description: "Configurar Resend ou Brevo com chave privada e remetente válido (envio real a validar).",
     },
     {
       id: "auth-keys",
@@ -112,11 +120,11 @@ export function evaluateCommercialConfig(env: CommercialEnv) {
     configurationReady: checks.every(c => c.passed),
     checks,
     pendingManualVerification: [
-      "Confirmar que o domínio remetente está realmente verificado no Resend e entregar OTP/reset a duas caixas externas.",
+      "Confirmar na conta do provedor selecionado que o remetente foi aprovado; enviar OTP, confirmação e reset a duas caixas externas, conferir spam e domínio apresentado.",
       "Concluir política e termos específicos do operador; registrar aceite versionado antes de dados reais.",
       "Testar duas barbearias reais de QA com dados fictícios e papéis distintos; fazer QA no celular.",
       "Executar backup gerenciado e restauração testada num ambiente descartável.",
-      "Validar rollback, monitoramento, suporte e rotina manual de cobrança/cancelamento.",
+      "Validar rollback, monitoramento, suporte e controle de acesso; cobrança das assinaturas ocorre exclusivamente fora do Barber OS.",
     ],
     warning: "Pré-checagem de configuração, não autorização de lançamento ou de dados pessoais reais.",
   };
