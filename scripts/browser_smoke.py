@@ -9,6 +9,7 @@ import sys
 import traceback
 from playwright.sync_api import expect, sync_playwright
 from barber_invites_smoke import run_barber_invites
+from csv_browser_smoke import run_csv_download
 
 BASE = os.getenv("SMOKE_BASE_URL", "http://127.0.0.1:5173").rstrip("/")
 EVIDENCE = pathlib.Path("artifacts/browser-smoke")
@@ -86,6 +87,9 @@ def run():
             finish.click()
             expect(page.get_by_text("Venda registrada", exact=True)).to_be_visible(timeout=30000)
             shot(page, "05-venda-pix")
+
+            stage = "csv-vendas-download"
+            run_csv_download(page, BASE)
 
             stage = "caixa"
             page.goto(BASE + "/app/caixa", wait_until="domcontentloaded")
