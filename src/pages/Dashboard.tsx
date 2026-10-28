@@ -135,7 +135,7 @@ export default function Dashboard() {
           label="Faturamento hoje"
           value={brl(k.revenueToday)}
           icon={Wallet}
-          hint={`${k.salesCountToday} venda(s) · ticket médio ${brl(k.averageTicket)}`}
+          hint={`${k.salesCountToday} venda(s) · ticket médio hoje ${brl(k.salesCountToday > 0 ? Math.round(k.revenueToday / k.salesCountToday) : 0)}`}
         />
         <StatCard
           label="Faturamento do mês"
