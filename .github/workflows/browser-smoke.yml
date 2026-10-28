@@ -69,6 +69,9 @@ jobs:
           done
           if [ "$ready" -ne 1 ]; then echo "Vite não iniciou"; tail -n 150 /tmp/vite-browser-smoke.log; exit 1; fi
           python scripts/browser_smoke.py
+          # Só executa com CONVEX_DEPLOYMENT local/anônimo e URL loopback.
+          # Nunca aponta para remoto; --replace atua apenas no banco descartável deste job.
+          python scripts/convex_local_restore_smoke.py
       - name: Logs em caso de falha
         if: failure()
         run: |
