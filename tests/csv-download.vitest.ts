@@ -11,7 +11,7 @@ describe("download de CSV para Excel", () => {
     let clicked = 0;
     let cleanup: (() => void) | undefined;
     const link = { href: "", download: "", click: () => { clicked++; } };
-    const createObjectURL = vi.fn(() => "blob:https://barber-os.pages.dev/ficticio");
+    const createObjectURL = vi.fn((_blob: Blob) => "blob:https://barber-os.pages.dev/ficticio");
     const revokeObjectURL = vi.fn();
     const createElement = vi.fn((tag: string) => {
       expect(tag).toBe("a");
