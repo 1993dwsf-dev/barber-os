@@ -1,7 +1,7 @@
 """Ensaio de exportação/restauração Convex exclusivamente em backend LOCAL descartável.
 
 NUNCA executar contra dados hospedados. Este script aborta sem uma .env.local
-que ateste CONVEX_DEPLOYMENT=local:..., e chama a CLI com --deployment local.
+que ateste deployment local/anônimo E URL loopback, e usa --deployment local.
 O snapshot temporário só contém os dados fictícios do browser smoke.
 """
 from __future__ import annotations
@@ -20,13 +20,22 @@ def assert_local_only():
     envfile = ROOT / ".env.local"
     if not envfile.is_file():
         raise RuntimeError("Proteção: .env.local ausente; restauração recusada")
-    match = re.search(r"^CONVEX_DEPLOYMENT=['\"]?([^'\"\r\n]+)", envfile.read_text(), re.M)
-    if not match or not match.group(1).startswith("local:"):
-        raise RuntimeError("Proteção: deployment não é local; restauração recusada")
+    values = {}
+    for line in envfile.read_text().splitlines():
+        if "=" in line and not line.lstrip().startswith("#"):
+            key, value = line.split("=", 1)
+            values[key.strip()] = value.strip().strip("'\"")
+    deployment = values.get("CONVEX_DEPLOYMENT", "")
+    # O Convex CLI pode identificar backend local anônimo como anonymous:...
+    if not deployment.startswith(("local:", "anonymous:")):
+        raise RuntimeError("Proteção: deployment não é local/anônimo; restauração recusada")
+    from urllib.parse import urlparse
+    endpoint = urlparse(values.get("VITE_CONVEX_URL", values.get("CONVEX_URL", "")))
+    if endpoint.scheme != "http" or endpoint.hostname not in ("localhost", "127.0.0.1", "::1") or not endpoint.port:
+        raise RuntimeError("Proteção: URL Convex não aponta para loopback local")
     for key in ("CONVEX_DEPLOY_KEY", "CONVEX_SELF_HOSTED_URL", "CONVEX_SELF_HOSTED_ADMIN_KEY"):
-        if os.environ.get(key):
+        if os.environ.get(key) or values.get(key):
             raise RuntimeError(f"Proteção: {key} presente; restauração recusada")
-
 
 def run_convex(*args: str):
     # Nenhuma opção para --prod, nenhum deployment remoto aceito.
