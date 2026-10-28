@@ -10,6 +10,7 @@ import traceback
 from playwright.sync_api import expect, sync_playwright
 from barber_invites_smoke import run_barber_invites
 from csv_browser_smoke import run_csv_download
+from public_demo_smoke import run_public_demo
 
 BASE = os.getenv("SMOKE_BASE_URL", "http://127.0.0.1:5173").rstrip("/")
 EVIDENCE = pathlib.Path("artifacts/browser-smoke")
@@ -32,8 +33,10 @@ def run():
         page.set_default_timeout(18000)
         errors = []
         page.on("pageerror", lambda err: errors.append(str(err)))
-        stage = "login"
+        stage = "public-demo"
         try:
+            run_public_demo(page, BASE)
+            stage = "login"
             page.goto(BASE + "/auth", wait_until="domcontentloaded", timeout=45000)
             expect(page.get_by_role("heading", name="Entre na sua barbearia")).to_be_visible(timeout=30000)
             expect(page.locator("#auth-email")).to_be_visible()
