@@ -105,3 +105,52 @@ test("site comercial separado no domínio gratuito pages.dev continua permitido"
   expect(result.checks.find(c => c.id === "isolated-convex")?.passed).toBe(true);
   expect(result.configurationReady).toBe(true);
 });
+
+
+test("Brevo pode ser pré-validado sem comprar domínio, mas exige teste real de entrega", () => {
+  const result = evaluateCommercialConfig({
+    ...valid,
+    BARBER_EMAIL_PROVIDER: "brevo",
+    BREVO_API_KEY: "chave-ficticia-invalida",
+    BREVO_FROM_EMAIL: "Barber OS <teste@gmail.com>",
+    RESEND_API_KEY: undefined,
+    RESEND_FROM_EMAIL: undefined,
+  });
+  expect(result.checks.find(c => c.id === "email-delivery")?.passed).toBe(true);
+  expect(result.configurationReady).toBe(true);
+  expect(result.pendingManualVerification.join(" ")).toMatch(/enviar OTP, confirmação e reset a duas caixas externas/i);
+  const serialized = JSON.stringify(result);
+  expect(serialized).not.toContain("chave-ficticia-invalida");
+});
+
+test("Brevo exige credenciais correspondentes sem recorrer silenciosamente ao Resend", () => {
+  for (const change of [
+    { BREVO_API_KEY: "" },
+    { BREVO_FROM_EMAIL: "" },
+    { BREVO_FROM_EMAIL: "remetente inválido" },
+    { BARBER_EMAIL_PROVIDER: "smtp" },
+  ]) {
+    const result = evaluateCommercialConfig({
+      ...valid,
+      BARBER_EMAIL_PROVIDER: "brevo",
+      BREVO_API_KEY: "chave-ficticia-invalida",
+      BREVO_FROM_EMAIL: "Barber OS <teste@gmail.com>",
+      ...change,
+    });
+    expect(result.checks.find(c => c.id === "email-delivery")?.passed).toBe(false);
+    expect(result.configurationReady).toBe(false);
+  }
+});
+
+test("sem provedor explícito o Resend permanece padrão, sem abrir sandbox como comercial", () => {
+  const withBrevoButDefaultResend = evaluateCommercialConfig({
+    ...valid,
+    BARBER_EMAIL_PROVIDER: undefined,
+    BREVO_API_KEY: "outra-chave-ficticia",
+    BREVO_FROM_EMAIL: "Barber OS <teste@gmail.com>",
+    RESEND_API_KEY: "",
+  });
+  expect(withBrevoButDefaultResend.checks.find(c => c.id === "email-delivery")?.passed).toBe(false);
+  const sandbox = evaluateCommercialConfig({ ...valid, RESEND_FROM_EMAIL: "onboarding@resend.dev" });
+  expect(sandbox.checks.find(c => c.id === "email-delivery")?.passed).toBe(false);
+});
