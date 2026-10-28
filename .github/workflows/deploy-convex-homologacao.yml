@@ -1,0 +1,60 @@
+name: Deploy Convex — homologação (somente staging)
+
+on:
+  push:
+    branches: [staging]
+    paths:
+      - "src/convex/**"
+      - ".github/workflows/deploy-convex-homologacao.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: convex-homologacao-unique-tortoise-387
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Publicar funções no Convex DEV (unique-tortoise-387)
+    if: github.repository == '1993dwsf-dev/barber-os' && github.ref == 'refs/heads/staging'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: convex-homologacao
+
+    steps:
+      - name: Checkout exato da staging
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Configurar Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Configurar Bun 1.4.4
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      - name: Instalar dependências reproduzíveis
+        run: bun install --frozen-lockfile
+
+      - name: Verificar chave restrita ao deployment DEV correto
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_HOMOLOGACAO_DEPLOY_KEY }}
+        shell: bash
+        run: |
+          node -e 'const k=process.env.CONVEX_DEPLOY_KEY||""; if (!k.startsWith("dev:unique-tortoise-387|")) { console.error("Chave ausente ou deployment incorreto. Publicação bloqueada."); process.exit(1); }'
+
+      - name: Checar tipos antes do deploy
+        run: bunx tsc -b --pretty false
+
+      - name: Publicar no Convex de homologação
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_HOMOLOGACAO_DEPLOY_KEY }}
+        run: bunx convex dev --once
+
+      - name: Confirmação do envio
+        run: echo "Envio das funções concluído para o Convex DEV de homologação."
