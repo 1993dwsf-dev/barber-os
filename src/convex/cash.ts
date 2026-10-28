@@ -53,6 +53,7 @@ export const currentSession = query({
       .collect();
     const byMethod = { dinheiro: 0, debito: 0, credito: 0, pix: 0 } as Record<string, number>;
     for (const sale of sales) {
+      if (sale.status === "cancelada") continue;
       const payments = await ctx.db
         .query("payments")
         .withIndex("by_sale", (q) => q.eq("saleId", sale._id))
@@ -65,7 +66,7 @@ export const currentSession = query({
       movements: detailed,
       expectedCents: expectedFromMovements(session.openingBalanceCents, movements),
       todayByMethod: byMethod,
-      todaySales: sales.length,
+      todaySales: sales.filter(s => s.status === "concluida").length,
       openDays: Math.max(
         1,
         Math.round((Date.now() - session.openedAt) / 86_400_000),
