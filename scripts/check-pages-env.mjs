@@ -28,8 +28,7 @@ export function checkPagesEnv(env) {
       if (
         url.protocol !== "https:" ||
         !/^[a-z0-9-]+\.convex\.cloud$/i.test(url.hostname) ||
-        url.username || url.password || url.port ||
-        url.pathname !== "/" || url.search || url.hash
+        url.href !== `https://${url.hostname}/`
       ) {
         errors.push("VITE_CONVEX_URL deve ser a URL HTTPS limpa do deployment Convex (*.convex.cloud).");
       }
