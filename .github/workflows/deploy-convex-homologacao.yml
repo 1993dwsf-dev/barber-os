@@ -54,7 +54,7 @@ jobs:
       - name: Publicar no Convex de homologação
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_HOMOLOGACAO_DEPLOY_KEY }}
-        run: bunx convex dev --once
+        run: bunx convex deploy --message "Homologação staging ${GITHUB_SHA}"
 
       - name: Confirmação do envio
         run: echo "Envio das funções concluído para o Convex DEV de homologação."
