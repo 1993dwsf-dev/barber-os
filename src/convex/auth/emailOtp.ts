@@ -45,7 +45,7 @@ export async function sendAccessCode(
         : purpose === "verification"
           ? "Confirme seu e-mail no Barber OS"
           : "Seu código de acesso ao Barber OS",
-    text: `Seu código de ${purpose === "reset" ? "redefinição de senha" : purpose === "verification" ? "verificação de e-mail" : "acesso"} ao Barber OS é ${token}.\\n\\nO código expira em 15 minutos. Se você não solicitou, ignore. Não compartilhe o código.`,
+    text: `Seu código de ${purpose === "reset" ? "redefinição de senha" : purpose === "verification" ? "verificação de e-mail" : "acesso"} ao Barber OS é ${token}.\n\nO código expira em 15 minutos. Se você não solicitou, ignore. Não compartilhe o código.`,
   });
   // O mock de rede do browser smoke é EXCLUSIVO para Resend no Convex local.
   const endpoint = provider === "resend" ? emailEndpoint() : request.url;
