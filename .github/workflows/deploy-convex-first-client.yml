@@ -1,0 +1,56 @@
+name: Convex Production — primeiro cliente (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: convex-first-client-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Publicação controlada no Convex Production (clever-squid-863)
+    if: github.repository == '1993dwsf-dev/barber-os' && github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: convex-primeiro-cliente
+
+    steps:
+      - name: Obter versão exata da branch production
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      - name: Instalar dependências
+        run: bun install --frozen-lockfile
+
+      - name: Falhar fechado se a chave não for da Production pretendida
+        shell: bash
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_FIRST_CLIENT_DEPLOY_KEY }}
+        run: |
+          node -e 'const k=process.env.CONVEX_DEPLOY_KEY||""; if (!k.startsWith("prod:clever-squid-863|")) { console.error("Publicação BLOQUEADA: configure a chave restrita ao Convex Production clever-squid-863. Nunca use a chave do DEV."); process.exit(1); }'
+
+      - name: Validar tipos antes do deploy
+        run: bunx tsc -b --pretty false
+
+      - name: Publicar backend SOMENTE no deployment comercial autorizado
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_FIRST_CLIENT_DEPLOY_KEY }}
+        run: bunx convex deploy --message "Primeiro cliente production ${GITHUB_SHA}"
+
+      - name: Registrar conclusão sem expor credenciais
+        run: echo "Funções enviadas ao Convex Production clever-squid-863; falta validar login e dados reais antes da entrega."
