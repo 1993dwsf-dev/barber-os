@@ -205,7 +205,7 @@ export const issueOperationalInvite = internalMutation({
   args: { email: v.string(), accessDays: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const email = args.email.trim().toLowerCase();
-    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length > 254)
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254)
       bad("E-mail de convite inválido.");
     const days = args.accessDays ?? 365;
     if (!Number.isInteger(days) || days < 30 || days > 366)
@@ -357,6 +357,11 @@ export const createOrganization = mutation({
       if (!invite || invite.redeemedAt || invite.expiresAt <= Date.now() ||
           invite.email !== user.email.trim().toLowerCase())
         bad("Convite comercial inválido, vencido ou já utilizado.");
+    }
+    if (invite?.accessDays) {
+      const existing = await ctx.db.query("organizations").take(1);
+      if (existing.length > 0)
+        bad("Este ambiente operacional já está vinculado à primeira barbearia.");
     }
     await enforceRateLimit(ctx, userId, "createOrganization");
     const now = Date.now();
