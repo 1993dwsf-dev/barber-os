@@ -204,6 +204,10 @@ export const issuePilotInvite = internalMutation({
 export const issueOperationalInvite = internalMutation({
   args: { email: v.string(), accessDays: v.optional(v.number()) },
   handler: async (ctx, args) => {
+    if (!isCommercialGateRequired() ||
+        (process.env.CONVEX_SITE_URL ?? "").includes("unique-tortoise-387")) {
+      bad("Convite operacional só pode ser emitido num deployment comercial separado.");
+    }
     const email = args.email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254)
       bad("E-mail de convite inválido.");
