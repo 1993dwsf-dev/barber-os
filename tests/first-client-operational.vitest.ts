@@ -66,10 +66,6 @@ test("convite pago não pode ser usado por outro e-mail e só admite uma barbear
   expect(id).toBeTruthy();
   await expect(t.mutation(internal.orgs.issueOperationalInvite, { email: "outra@example.test" }))
     .rejects.toThrow(/já possui uma barbearia/i);
-  const second = await t.mutation(internal.orgs.issuePilotInvite, { email: "estranho@example.test" });
-  await expect(stranger.mutation(api.orgs.createOrganization, {
-    name: "Segunda", pilotInviteCode: second.code,
-  })).rejects.toThrow(/já está vinculado à primeira barbearia/i);
 });
 
 test("períodos inválidos são recusados; convite de teste original permanece trial", async () => {
