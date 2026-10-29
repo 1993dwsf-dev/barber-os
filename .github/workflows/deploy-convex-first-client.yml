@@ -1,6 +1,13 @@
 name: Convex Production — primeiro cliente (manual)
 
+# Evento em production, sem exigir workflow na branch main.
+# A falta da chave de deploy provoca falha fechada, jamais fallback para DEV.
 on:
+  push:
+    branches: [production]
+    paths:
+      - "src/convex/**"
+      - ".github/workflows/deploy-convex-first-client.yml"
   workflow_dispatch:
 
 permissions:
