@@ -19,6 +19,7 @@ import { useOrg } from "@/lib/org-context";
 import { useAuth } from "@/hooks/use-auth";
 
 const pilotGoogleOnly = import.meta.env.VITE_MVP_GOOGLE_ONLY === "true";
+const requiresPilotInvite = pilotGoogleOnly || (import.meta.env.VITE_PRODUCTION_ENABLED === "true" && import.meta.env.VITE_STAGING_ONLY === "false");
 
 const STEPS = [
   "Identidade da barbearia",
@@ -54,7 +55,7 @@ export default function Onboarding() {
     setBusy(true);
     setError(null);
     try {
-      if (pilotGoogleOnly && !/^[0-9a-f]{64}$/.test(pilotInviteCode.trim().toLowerCase())) {
+      if (requiresPilotInvite && !/^[0-9a-f]{64}$/.test(pilotInviteCode.trim().toLowerCase())) {
         setError("Para criar sua barbearia no piloto, informe o convite exclusivo recebido.");
         return;
       }
@@ -179,7 +180,7 @@ export default function Onboarding() {
               [
                 { id: "create", label: "Criar barbearia" },
                 { id: "join", label: "Tenho um convite" },
-                ...(!pilotGoogleOnly ? [{ id: "demo", label: "Ver o demo" } as const] : []),
+                ...(!requiresPilotInvite ? [{ id: "demo", label: "Ver o demo" } as const] : []),
               ] as const
             ).map((t) => (
               <button
@@ -257,7 +258,7 @@ export default function Onboarding() {
                 />
               </div>
               <div>
-                 <Label htmlFor="ob-pilot-code">Código de acesso ao piloto {pilotGoogleOnly ? "(obrigatório)" : "(se recebeu)"}</Label>
+                 <Label htmlFor="ob-pilot-code">Código de ativação {requiresPilotInvite ? "(obrigatório)" : "(se recebeu)"}</Label>
                  <Input
                    id="ob-pilot-code"
                    type="text"
@@ -268,18 +269,18 @@ export default function Onboarding() {
                    onChange={e => setPilotInviteCode(e.target.value.trim().toLowerCase())}
                    maxLength={64}
                    pattern="[0-9a-f]{64}"
-                   required={pilotGoogleOnly}
+                   required={requiresPilotInvite}
                    placeholder="Cole seu código exclusivo de acesso"
                    className="glass-input mt-1.5 font-mono text-xs"
                    disabled={busy}
                  />
                  <p className="mt-1 text-xs text-muted-foreground">
-                   Necessário para clientes convidados ao piloto. É diferente do convite
+                   Fornecido pelo administrador após a contratação. É diferente do convite
                    de equipe disponível na aba “Tenho um convite”.
                  </p>
                </div>
                <Button type="submit" className="mt-2" disabled={busy || name.trim().length < 2 ||
-                 (pilotGoogleOnly && pilotInviteCode.length === 0) ||
+                 (requiresPilotInvite && pilotInviteCode.length === 0) ||
                  (pilotInviteCode.length > 0 && !/^[0-9a-f]{64}$/.test(pilotInviteCode))}>
                 {busy ? <Loader2 className="size-4 animate-spin" /> : <Store className="size-4" />}
                 Criar barbearia

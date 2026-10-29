@@ -195,6 +195,42 @@ export const issuePilotInvite = internalMutation({
   },
 });
 
+/** 
+ * Acesso para UM cliente operacional após contratação externa.
+ * NÃO registra pagamento: emite convite de uso único, vinculado a e-mail verificado.
+ * O operador escolhe prazo de acesso manualmente (30-366 dias).
+ * Somente callable interno do Convex; NÃO disponível no frontend.
+ */
+export const issueOperationalInvite = internalMutation({
+  args: { email: v.string(), accessDays: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    if (!isCommercialGateRequired() ||
+        (process.env.CONVEX_SITE_URL ?? "").includes("unique-tortoise-387")) {
+      bad("Convite operacional só pode ser emitido num deployment comercial separado.");
+    }
+    const email = args.email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254)
+      bad("E-mail de convite inválido.");
+    const days = args.accessDays ?? 365;
+    if (!Number.isInteger(days) || days < 30 || days > 366)
+      bad("O prazo operacional deve estar entre 30 e 366 dias.");
+    // Apenas uma barbearia operacional neste piloto: impedir novo convite
+    // se outra unidade já utiliza o deployment separado.
+    const existing = await ctx.db.query("organizations").take(1);
+    if (existing.length > 0)
+      bad("O ambiente do primeiro cliente já possui uma barbearia.");
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    const code = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+    const now = Date.now();
+    const inviteId = await ctx.db.insert("commercialInvites", {
+      code, email, trialDays: 14, accessDays: days,
+      createdAt: now, expiresAt: now + 7 * 86_400_000,
+    });
+    return { inviteId, code, expiresAt: now + 7 * 86_400_000 };
+  },
+});
+
 /** Oculta o convite de ingresso e dados de gestão das sessões de barbeiro. */
 function redactForBarber(org: Doc<"organizations">): Doc<"organizations"> {
   return {
@@ -326,6 +362,11 @@ export const createOrganization = mutation({
           invite.email !== user.email.trim().toLowerCase())
         bad("Convite comercial inválido, vencido ou já utilizado.");
     }
+    if (invite?.accessDays) {
+      const existing = await ctx.db.query("organizations").take(1);
+      if (existing.length > 0)
+        bad("Este ambiente operacional já está vinculado à primeira barbearia.");
+    }
     await enforceRateLimit(ctx, userId, "createOrganization");
     const now = Date.now();
     const name = requiredText(args.name, "name", "Nome da barbearia");
@@ -355,8 +396,10 @@ export const createOrganization = mutation({
       await ctx.db.insert("organizationEntitlements", {
         organizationId: orgId,
         plan: "pilot",
-        status: "trialing",
-        trialEndsAt: now + invite.trialDays * 86_400_000,
+        status: invite.accessDays ? "active" : "trialing",
+        ...(invite.accessDays
+          ? { periodEndsAt: now + invite.accessDays * 86_400_000 }
+          : { trialEndsAt: now + invite.trialDays * 86_400_000 }),
         source: "pilot",
         createdAt: now,
         updatedAt: now,

@@ -93,6 +93,8 @@ const schema = defineSchema(
       code: v.string(), // 256 bits aleatórios; entregar apenas ao destinatário
       email: v.string(),
       trialDays: v.number(),
+      /** Acesso operacional manual, não integra pagamentos ou assinatura automática. */
+      accessDays: v.optional(v.number()),
       expiresAt: v.number(),
       createdAt: v.number(),
       redeemedAt: v.optional(v.number()),
