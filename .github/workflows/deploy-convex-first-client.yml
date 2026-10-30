@@ -7,6 +7,12 @@ on:
     branches: [production]
     paths:
       - "src/convex/**"
+      - "src/lib/**"
+      - "src/types/**"
+      - "convex.json"
+      - "package.json"
+      - "bun.lock"
+      - "tsconfig*.json"
       - ".github/workflows/deploy-convex-first-client.yml"
   workflow_dispatch:
 

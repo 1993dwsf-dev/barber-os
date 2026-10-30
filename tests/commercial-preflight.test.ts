@@ -48,6 +48,17 @@ test("sem flags comerciais e sem cobrança, falha fechado", () => {
   expect(result.checks.find(x => x.id === "enforced-entitlements")?.passed).toBe(false);
 });
 
+test("primeiro cliente operacional exige convite sem integrar cobrança do SaaS", () => {
+  const result = evaluateCommercialConfig({
+    ...valid,
+    BARBER_AUTH_COMMERCIAL_ENABLED: "true",
+    BARBER_BILLING_ENFORCED: "false",
+  });
+  expect(result.configurationReady).toBe(true);
+  expect(result.checks.find(x => x.id === "commercial-invitations")?.passed).toBe(true);
+  expect(result.checks.find(x => x.id === "enforced-entitlements")?.passed).toBe(true);
+});
+
 test("remetente de sandbox, segredo ausente e HTTP impedem prontidão", () => {
   const result = evaluateCommercialConfig({
     ...valid, RESEND_FROM_EMAIL: "onboarding@resend.dev",
