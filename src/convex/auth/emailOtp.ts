@@ -22,7 +22,7 @@ export const enqueueManualCode = internalMutation({
     }
     const email = authorizeCurrentEmail(args.email);
     const length = args.purpose === "access" ? 6 : 8;
-    if (!new RegExp("^\\\\d{" + length + "}$").test(args.token)) {
+    if (!new RegExp("^\\d{" + length + "}$").test(args.token)) {
       throw new Error("Código de autenticação inválido.");
     }
     const now = Date.now();
