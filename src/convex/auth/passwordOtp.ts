@@ -1,4 +1,5 @@
 import { Email } from "@convex-dev/auth/providers/Email";
+import { internal } from "../_generated/api";
 import { RandomReader, generateRandomString } from "@oslojs/crypto/random";
 import { sendAccessCode } from "./emailOtp";
 
@@ -14,8 +15,9 @@ function makeEmailCodeProvider(id: string, purpose: "verification" | "reset") {
       };
       return generateRandomString(reader, "0123456789", 8);
     },
-    async sendVerificationRequest({ identifier, token }) {
-      await sendAccessCode(identifier, token, purpose);
+    async sendVerificationRequest({ identifier, token }, ctx) {
+      await sendAccessCode(identifier, token, purpose, args =>
+        ctx.runMutation(internal["auth/emailOtp"].enqueueManualCode, args));
     },
   });
 }
