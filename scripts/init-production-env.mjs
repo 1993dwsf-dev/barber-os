@@ -2,7 +2,7 @@
  * Barber OS first-client production bootstrap. Idempotent, no key rotation.
  * Requires a deploy key scoped to prod:clever-squid-863 with env write permissions.
  */
-import { generateKeyPairSync } from 'node:crypto';
+import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 
 if (!(process.env.CONVEX_DEPLOY_KEY || '').startsWith('prod:clever-squid-863|')) {
@@ -37,6 +37,7 @@ const settings = [
   ['BARBER_MVP_GOOGLE_ONLY', 'false'],
   ['BARBER_AUTH_COMMERCIAL_ENABLED', 'false'],
   ['BARBER_BILLING_ENFORCED', 'false'],
+  ['BARBER_EMAIL_PROVIDER', 'manual'],
 ];
 for (const [name, value] of settings) {
   if (old.has(name)) console.log('Preservado: ' + name);
@@ -58,8 +59,13 @@ if (!hasPrivate) {
   convex(['env', 'set', '--prod', 'JWKS'], jwks + '\n');
   console.log('Criado: par JWT_PRIVATE_KEY/JWKS (valores ocultos)');
 } else console.log('Preservado: par JWT_PRIVATE_KEY/JWKS');
+if (!old.has('BARBER_MANUAL_INBOX_SECRET')) {
+  const secret = randomBytes(32).toString('hex');
+  convex(['env', 'set', '--prod', 'BARBER_MANUAL_INBOX_SECRET'], secret + '\\n');
+  console.log('Criado: segredo interno para entrega manual de códigos (valor oculto)');
+} else console.log('Preservado: segredo interno para entrega manual de códigos');
 const after = names();
-for (const name of [...settings.map(s => s[0]), 'JWT_PRIVATE_KEY', 'JWKS']) {
+for (const name of [...settings.map(s => s[0]), 'JWT_PRIVATE_KEY', 'JWKS', 'BARBER_MANUAL_INBOX_SECRET']) {
   if (!after.has(name)) throw new Error('Verificação falhou: ' + name + ' não consta no Convex Production.');
 }
 console.log('Bootstrap concluído. Cadastro comercial permanece bloqueado.');
