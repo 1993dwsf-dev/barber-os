@@ -18,6 +18,7 @@ export type CommercialEnv = {
   BREVO_FROM_EMAIL?: string;
   SITE_URL?: string;
   CONVEX_SITE_URL?: string;
+  CONVEX_CLOUD_URL?: string;
   CONVEX_DEPLOYMENT?: string;
   JWT_PRIVATE_KEY?: string;
   JWKS?: string;
@@ -53,13 +54,20 @@ export function evaluateCommercialConfig(env: CommercialEnv) {
     !email.endsWith("@resend.dev");
   const convexUrl = env.CONVEX_SITE_URL?.trim().toLowerCase() ?? "";
   const deployment = env.CONVEX_DEPLOYMENT?.trim().toLowerCase() ?? "";
-  // Nunca aceitar chave de DEV, deploy ausente ou endpoint da homologação.
-  // O nome do deployment é parte pública do endereço Convex HTTP Actions.
+  // CONVEX_DEPLOYMENT não é fornecida automaticamente ao runtime de funções.
+  // O projeto do primeiro cliente tem deployment de produção fixo e isolado;
+  // a URL de nuvem e a URL HTTP são variáveis de sistema fornecidas pelo Convex.
+  const expectedProd = "clever-squid-863";
+  const cloudUrl = env.CONVEX_CLOUD_URL?.trim().toLowerCase() ?? "";
   const prodMatch = /^prod:([a-z0-9]+(?:-[a-z0-9]+)*)$/.exec(deployment);
-  const isolatedConvex = !!prodMatch &&
-    convexUrl === `https://${prodMatch[1]}.convex.site` &&
+  const namedProduction = !!prodMatch &&
     prodMatch[1] !== "unique-tortoise-387" &&
-    validHttps(convexUrl, ".convex.site");
+    convexUrl === `https://${prodMatch[1]}.convex.site`;
+  const builtInProduction = !deployment &&
+    convexUrl === `https://${expectedProd}.convex.site` &&
+    cloudUrl === `https://${expectedProd}.convex.cloud`;
+  const isolatedConvex = validHttps(convexUrl, ".convex.site") &&
+    (namedProduction || builtInProduction);
 
   // Cloudflare Pages pode ser usado sem domínio próprio, desde que seja um
   // projeto comercial NOVO. Proibir URLs do projeto de homologação/piloto,
