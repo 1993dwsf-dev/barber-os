@@ -1,0 +1,36 @@
+name: Smoke público — Barber OS primeiro cliente
+
+on:
+  push:
+    branches: [production]
+    paths:
+      - ".github/workflows/live-production-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-http:
+    name: HTTPS, rota login e bundle de produção
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validar HTTP público sem login ou dados reais
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://barber-os-cliente.pages.dev"
+          curl --fail --silent --show-error --location --retry 3 --max-time 30 \
+            "${BASE}/" -o /tmp/barber-root.html
+          curl --fail --silent --show-error --location --retry 3 --max-time 30 \
+            "${BASE}/auth" -o /tmp/barber-auth.html
+          grep -Fq '<div id="root"></div>' /tmp/barber-root.html
+          grep -Fq '<div id="root"></div>' /tmp/barber-auth.html
+          grep -Fq '<title>Barber OS</title>' /tmp/barber-root.html
+          JS_PATH=$(grep -oE 'src="/assets/[^"]+\.js"' /tmp/barber-root.html | head -n 1 | sed -E 's/^src="([^"]+)"$/\1/')
+          test -n "$JS_PATH"
+          curl --fail --silent --show-error --location --retry 3 --max-time 30 \
+            "${BASE}${JS_PATH}" -o /tmp/barber-entry.js
+          test -s /tmp/barber-entry.js
+          echo "OK: site, rota /auth e bundle JS publicados sob HTTPS."
