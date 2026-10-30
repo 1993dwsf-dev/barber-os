@@ -81,6 +81,18 @@ test("modo exclusivamente Google contradiz a autenticação escolhida para o pil
 });
 
 
+test("deployment comercial real usa URLs do sistema sem exigir CONVEX_DEPLOYMENT", () => {
+  const env = {
+    ...valid,
+    CONVEX_DEPLOYMENT: undefined,
+    CONVEX_SITE_URL: "https://clever-squid-863.convex.site",
+    CONVEX_CLOUD_URL: "https://clever-squid-863.convex.cloud",
+  };
+  expect(evaluateCommercialConfig(env).checks.find(c => c.id === "isolated-convex")?.passed).toBe(true);
+  expect(evaluateCommercialConfig({ ...env, CONVEX_CLOUD_URL: "https://unique-tortoise-387.convex.cloud" }).configurationReady).toBe(false);
+  expect(evaluateCommercialConfig({ ...env, CONVEX_SITE_URL: "https://other.convex.site" }).configurationReady).toBe(false);
+});
+
 test("deployment de desenvolvimento diferente do original não é aceito em ambiente comercial", () => {
   const result = evaluateCommercialConfig({
     ...valid,
