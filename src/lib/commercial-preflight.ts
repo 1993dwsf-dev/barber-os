@@ -90,8 +90,9 @@ export function evaluateCommercialConfig(env: CommercialEnv) {
     },
     {
       id: "enforced-entitlements",
-      passed: env.BARBER_BILLING_ENFORCED === "true",
-      description: "Exigir prazo de acesso válido; não processa pagamentos das assinaturas.",
+      passed: env.BARBER_BILLING_ENFORCED === "true" ||
+        env.BARBER_AUTH_COMMERCIAL_ENABLED === "true",
+      description: "Exigir prazo de acesso válido por convite comercial ou bloqueio de cobrança; não processa pagamentos.",
     },
     {
       id: "password-login",
