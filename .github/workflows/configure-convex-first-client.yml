@@ -1,0 +1,42 @@
+name: Configuração inicial Convex Production — primeiro cliente
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [production]
+    paths:
+      - ".github/workflows/configure-convex-first-client.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: convex-first-client-env-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  configure:
+    name: Configurar variáveis seguras sem ativar cadastro comercial
+    if: github.repository == '1993dwsf-dev/barber-os' && github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: convex-primeiro-cliente
+    steps:
+      - name: Checkout production
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Bun 1.4.4
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Instalar dependências
+        run: bun install --frozen-lockfile
+      - name: Provisionar apenas valores ausentes sem imprimir segredos
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_FIRST_CLIENT_DEPLOY_KEY }}
+        run: node scripts/init-production-env.mjs
