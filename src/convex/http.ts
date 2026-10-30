@@ -67,4 +67,45 @@ http.route({
   }),
 });
 
+/** Caixa de códigos exclusiva do Convex Production, sem provedor de email. */
+http.route({
+  path: "/internal/manual-auth-code",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    if (process.env.BARBER_EMAIL_PROVIDER !== "manual" ||
+        process.env.CONVEX_SITE_URL !== "https://clever-squid-863.convex.site") {
+      return new Response("Not Found", { status: 404 });
+    }
+    const secret = process.env.BARBER_MANUAL_INBOX_SECRET ?? "";
+    if (!(await matchWebhookSecret(request.headers.get("x-barber-inbox-secret"), secret))) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+    if (!(request.headers.get("content-type") ?? "").startsWith("application/json")) {
+      return new Response("Unsupported Media Type", { status: 415 });
+    }
+    if (Number(request.headers.get("content-length") ?? "0") > 1024) {
+      return new Response("Payload Too Large", { status: 413 });
+    }
+    try {
+      const raw = await request.text();
+      if (raw.length > 1024) return new Response("Payload Too Large", { status: 413 });
+      const data: unknown = JSON.parse(raw);
+      if (!data || typeof data !== "object" || Array.isArray(data)) {
+        return new Response("Bad Request", { status: 400 });
+      }
+      const o = data as Record<string, unknown>;
+      if (typeof o.email !== "string" || typeof o.token !== "string" ||
+          (o.purpose !== "access" && o.purpose !== "verification" && o.purpose !== "reset")) {
+        return new Response("Bad Request", { status: 400 });
+      }
+      await ctx.runMutation(internal.auth.emailOtp.enqueueManualCode, {
+        email: o.email, token: o.token, purpose: o.purpose,
+      });
+      return new Response("OK", { status: 200, headers: { "cache-control": "no-store" } });
+    } catch {
+      return new Response("Bad Request", { status: 400 });
+    }
+  }),
+});
+
 export default http;
