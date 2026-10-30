@@ -12,7 +12,9 @@ const googleEnabled = import.meta.env.VITE_GOOGLE_AUTH_ENABLED === "true";
 const googleOnly = import.meta.env.VITE_MVP_GOOGLE_ONLY === "true";
 const isStaging = import.meta.env.VITE_STAGING_ONLY === "true";
 // Habilitar somente com BARBER_EMAIL_PROVIDER=manual no Convex comercial.
-const manualCodes = import.meta.env.VITE_MANUAL_CODE_DELIVERY_ENABLED === "true";
+const manualCodes = import.meta.env.VITE_MANUAL_CODE_DELIVERY_ENABLED === "true" ||
+  (import.meta.env.VITE_PRODUCTION_ENABLED === "true" &&
+   import.meta.env.VITE_STAGING_ONLY === "false");
 
 function safeReturnTo(value: string | null, fallback: string) {
   return value?.startsWith("/") && !value.startsWith("//") ? value : fallback;
