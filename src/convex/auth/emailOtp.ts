@@ -1,6 +1,5 @@
 import { Email } from "@convex-dev/auth/providers/Email";
 import { v } from "convex/values";
-import { internal } from "../_generated/api";
 import { internalMutation, internalQuery } from "../_generated/server";
 import { RandomReader, generateRandomString } from "@oslojs/crypto/random";
 import { authorizeCurrentEmail, authorizeCurrentTransactionalEmail } from "./accessPolicy";
@@ -9,7 +8,6 @@ import { buildTransactionalEmailRequest, selectTransactionalEmailProvider } from
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 const codePurpose = v.union(v.literal("access"), v.literal("verification"), v.literal("reset"));
 type CodePurpose = "access" | "verification" | "reset";
-type ManualSink = (request: { email: string; token: string; purpose: CodePurpose }) => Promise<unknown>;
 
 /** Somente funções internas podem gravar códigos; não existe query pública.
  *  O operador deve confirmar o contato por um canal independente antes da entrega.
@@ -76,13 +74,25 @@ export async function sendAccessCode(
   email: string,
   token: string,
   purpose: CodePurpose = "access",
-  manualSink?: ManualSink,
-): Promise<void> {
+ ): Promise<void> {
   // O modo manual mantém a verificação do Convex Auth, mas entrega o código
   // por canal privado após conferência de identidade pelo operador.
   if (process.env.BARBER_EMAIL_PROVIDER === "manual") {
-    if (!manualSink) throw new Error("Canal privado para entrega manual indisponível.");
-    await manualSink({ email: authorizeCurrentEmail(email), token, purpose });
+    const secret = process.env.BARBER_MANUAL_INBOX_SECRET ?? "";
+    const site = (process.env.CONVEX_SITE_URL ?? "").replace(/\\/$/, "");
+    if (!/^https:\\/\\/[a-z0-9-]+\\.convex\\.site$/.test(site) ||
+        secret.length < 32 || secret.length > 255) {
+      throw new Error("Canal privado de códigos não configurado.");
+    }
+    const response = await fetch(site + "/internal/manual-auth-code", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-barber-inbox-secret": secret,
+      },
+      body: JSON.stringify({ email: authorizeCurrentEmail(email), token, purpose }),
+    });
+    if (!response.ok) throw new Error("Entrega ao operador indisponível. Tente novamente.");
     return;
   }
   const provider = selectTransactionalEmailProvider(process.env.BARBER_EMAIL_PROVIDER);
@@ -129,8 +139,7 @@ export const emailOtp = Email({
     };
     return generateRandomString(random, "0123456789", 6);
   },
-  async sendVerificationRequest({ identifier: email, token }, ctx) {
-    await sendAccessCode(email, token, "access", args =>
-      ctx.runMutation(internal["auth/emailOtp"].enqueueManualCode, args));
+  async sendVerificationRequest({ identifier: email, token }) {
+    await sendAccessCode(email, token, "access");
   },
 });
