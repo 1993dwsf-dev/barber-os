@@ -177,3 +177,26 @@ test("sem provedor explícito o Resend permanece padrão, sem abrir sandbox como
   const sandbox = evaluateCommercialConfig({ ...valid, RESEND_FROM_EMAIL: "onboarding@resend.dev" });
   expect(sandbox.checks.find(c => c.id === "email-delivery")?.passed).toBe(false);
 });
+
+test("primeiro cliente pode usar entrega MANUAL sem Brevo/Resend, mantendo QA obrigatório", () => {
+  const result = evaluateCommercialConfig({
+    ...valid,
+    BARBER_EMAIL_PROVIDER: "manual",
+    BARBER_MANUAL_INBOX_SECRET: "fake-test-value-32-characters-long---do-not-use",
+    BREVO_API_KEY: undefined, BREVO_FROM_EMAIL: undefined,
+    RESEND_API_KEY: undefined, RESEND_FROM_EMAIL: undefined,
+  });
+  expect(result.configurationReady).toBe(true);
+  expect(result.checks.find(c => c.id === "email-delivery")?.passed).toBe(true);
+  expect(result.pendingManualVerification.join(" ")).toMatch(/identidade|entrega pessoal/i);
+});
+
+test("modo manual não pode ser liberado sem segredo interno", () => {
+  const result = evaluateCommercialConfig({
+    ...valid,
+    BARBER_EMAIL_PROVIDER: "manual",
+    BARBER_MANUAL_INBOX_SECRET: undefined,
+  });
+  expect(result.configurationReady).toBe(false);
+  expect(result.checks.find(c => c.id === "email-delivery")?.passed).toBe(false);
+});

@@ -65,7 +65,7 @@ const googleProvider = Google({
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [
-    ...(enabled.otp ? [emailOtp] : []),
+    ...(enabled.otp && process.env.BARBER_EMAIL_PROVIDER !== "manual" ? [emailOtp] : []),
     ...(enabled.password ? [passwordProvider] : []),
     ...(enabled.google ? [googleProvider] : []),
     ...(enabled.anonymous ? [Anonymous] : []),

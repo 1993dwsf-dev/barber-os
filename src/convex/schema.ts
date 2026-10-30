@@ -67,6 +67,18 @@ const schema = defineSchema(
       role: v.optional(roleValidator),
     }).index("email", ["email"]),
 
+    /** Códigos temporários visíveis somente ao operador pelo Convex Dashboard.
+     *  Nunca são retornados em APIs públicas nem em backups da barbearia. */
+    manualAuthCodes: defineTable({
+      email: v.string(),
+      token: v.string(),
+      purpose: v.union(v.literal("access"), v.literal("verification"), v.literal("reset")),
+      createdAt: v.number(),
+      expiresAt: v.number(),
+    })
+      .index("by_email", ["email"])
+      .index("by_expires", ["expiresAt"]),
+
     /* ------------------------------ tenancy / auth ------------------------------ */
 
     organizations: defineTable({

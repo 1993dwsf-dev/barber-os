@@ -54,11 +54,14 @@ console.log("PASS JWT_PRIVATE_KEY/JWKS cryptographic public-key match");
 const provider = read("BARBER_EMAIL_PROVIDER") ?? "resend";
 const keyName = provider === "brevo" ? "BREVO_API_KEY" : "RESEND_API_KEY";
 const fromName = provider === "brevo" ? "BREVO_FROM_EMAIL" : "RESEND_FROM_EMAIL";
-const emailConfigured = (provider === "brevo" || provider === "resend") &&
-  !!read(keyName) && !!read(fromName);
-console.log(emailConfigured
-  ? "PENDING: e-mail provider configured, delivery is NOT verified"
-  : "BLOCKED: transactional e-mail provider not configured");
+const manual = provider === "manual" && !!read("BARBER_MANUAL_INBOX_SECRET");
+const emailConfigured = manual || ((provider === "brevo" || provider === "resend") &&
+  !!read(keyName) && !!read(fromName));
+console.log(manual
+  ? "PENDING: manual verification selected; operator delivery and identity checks require QA"
+  : emailConfigured
+    ? "PENDING: e-mail provider configured, delivery is NOT verified"
+    : "BLOCKED: transactional e-mail provider not configured");
 console.log("BLOCKED: commercial onboarding is deliberately disabled");
 console.log("PENDING: real e-mail delivery, recovery, backup restore, LGPD acceptance, tenant-isolation tests");
 console.log("PASS: production authentication configuration verified without leaking credentials.");
