@@ -6,6 +6,7 @@ on:
     branches: [production]
     paths:
       - ".github/workflows/configure-convex-first-client.yml"
+      - "scripts/init-production-env.mjs"
 
 permissions:
   contents: read
