@@ -74,17 +74,26 @@ export async function sendAccessCode(
   email: string,
   token: string,
   purpose: CodePurpose = "access",
- ): Promise<void> {
+): Promise<void> {
   // O modo manual mantém a verificação do Convex Auth, mas entrega o código
   // por canal privado após conferência de identidade pelo operador.
   if (process.env.BARBER_EMAIL_PROVIDER === "manual") {
     const secret = process.env.BARBER_MANUAL_INBOX_SECRET ?? "";
-    const site = (process.env.CONVEX_SITE_URL ?? "").replace(/\\/$/, "");
-    if (!/^https:\\/\\/[a-z0-9-]+\\.convex\\.site$/.test(site) ||
-        secret.length < 32 || secret.length > 255) {
+    const site = process.env.CONVEX_SITE_URL ?? "";
+    let origin = "";
+    try {
+      const parsed = new URL(site);
+      if (parsed.protocol === "https:" && parsed.hostname.endsWith(".convex.site") &&
+          !parsed.username && !parsed.password && parsed.pathname === "/") {
+        origin = parsed.origin;
+      }
+    } catch {
+      // Recusa URL inválida sem imprimir valor de variável de ambiente.
+    }
+    if (!origin || secret.length < 32 || secret.length > 255) {
       throw new Error("Canal privado de códigos não configurado.");
     }
-    const response = await fetch(site + "/internal/manual-auth-code", {
+    const response = await fetch(origin + "/internal/manual-auth-code", {
       method: "POST",
       headers: {
         "content-type": "application/json",
