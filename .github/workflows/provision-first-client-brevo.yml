@@ -1,0 +1,37 @@
+name: Provisão protegida de e-mail Brevo — primeiro cliente
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [production]
+    paths:
+      - ".github/workflows/provision-first-client-brevo.yml"
+      - "scripts/provision-first-client-brevo.mjs"
+
+permissions:
+  contents: read
+
+jobs:
+  provision:
+    name: Preparar Brevo no Convex Production sem habilitar clientes
+    if: github.repository == '1993dwsf-dev/barber-os' && github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: convex-primeiro-cliente
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - name: Provisionar somente se credenciais privadas aprovadas existirem
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_FIRST_CLIENT_DEPLOY_KEY }}
+          BARBER_FIRST_CLIENT_BREVO_KEY: ${{ secrets.BARBER_FIRST_CLIENT_BREVO_KEY }}
+          BARBER_FIRST_CLIENT_BREVO_FROM: ${{ secrets.BARBER_FIRST_CLIENT_BREVO_FROM }}
+        run: node scripts/provision-first-client-brevo.mjs
