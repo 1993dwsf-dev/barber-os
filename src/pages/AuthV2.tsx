@@ -11,6 +11,8 @@ const googleEnabled = import.meta.env.VITE_GOOGLE_AUTH_ENABLED === "true";
 // Escopo limitado ao piloto. Login Google é a única opção visível, sem alterar a homologação.
 const googleOnly = import.meta.env.VITE_MVP_GOOGLE_ONLY === "true";
 const isStaging = import.meta.env.VITE_STAGING_ONLY === "true";
+// Habilitar somente com BARBER_EMAIL_PROVIDER=manual no Convex comercial.
+const manualCodes = import.meta.env.VITE_MANUAL_CODE_DELIVERY_ENABLED === "true";
 
 function safeReturnTo(value: string | null, fallback: string) {
   return value?.startsWith("/") && !value.startsWith("//") ? value : fallback;
@@ -198,11 +200,17 @@ export default function AuthV2({ redirectAfterAuth = "/app" }: { redirectAfterAu
         <p className="mt-1 text-sm text-muted-foreground">
           {step === "signIn" && (googleOnly
             ? "Use sua conta Google. A criação de uma barbearia exige convite individual."
-            : "Entre com seu e-mail e senha ou continue com o Google.")}
-          {step === "signUp" && "Seu e-mail será verificado antes do primeiro acesso."}
-          {step === "resetRequest" && "Enviaremos um código para redefinir sua senha."}
+            : googleEnabled ? "Entre com seu e-mail e senha ou continue com o Google." : "Entre com seu e-mail e senha.")}
+          {step === "signUp" && (manualCodes
+            ? "Após criar a conta, solicite o código de ativação ao suporte pelo contato utilizado na contratação."
+            : "Seu e-mail será verificado antes do primeiro acesso.")}
+          {step === "resetRequest" && (manualCodes
+            ? "Solicite ao suporte a recuperação de senha. O código será entregue após confirmação da sua identidade."
+            : "Enviaremos um código para redefinir sua senha.")}
           {step === "otpRequest" && "Use o código por e-mail durante a migração de contas existentes."}
-          {codeStep && <>Enviamos um código para <strong>{email}</strong>.</>}
+          {codeStep && (manualCodes
+            ? <>Código solicitado para <strong>{email}</strong>. Entre em contato com o suporte pelo canal combinado. Não compartilhe o código recebido.</>
+            : <>Enviamos um código para <strong>{email}</strong>.</>)}
         </p>
 
         {error && <div role="alert" className="mt-4 rounded-xl bg-rose-500/10 p-3 text-sm text-rose-600">{error}</div>}
@@ -277,7 +285,7 @@ export default function AuthV2({ redirectAfterAuth = "/app" }: { redirectAfterAu
           {step === "signIn" && <>
             <button type="button" className="text-primary hover:underline" onClick={() => move("signUp")}>Criar conta</button>
             <button type="button" className="text-primary hover:underline" onClick={() => move("resetRequest")}>Esqueci minha senha</button>
-            <button type="button" className="text-primary hover:underline" onClick={() => move("otpRequest")}>Entrar com código</button>
+            {!manualCodes && <button type="button" className="text-primary hover:underline" onClick={() => move("otpRequest")}>Entrar com código</button>}
           </>}
           {step !== "signIn" && <button type="button" className="text-primary hover:underline" onClick={() => move("signIn")}>Voltar para entrar</button>}
           {step === "verify" && <button type="button" className="text-primary hover:underline" onClick={() => move("signUp")}>Solicitar novo código</button>}
