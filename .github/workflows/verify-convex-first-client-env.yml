@@ -1,0 +1,35 @@
+name: Auditoria segura de autenticação — Convex Production
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [production]
+    paths:
+      - ".github/workflows/verify-convex-first-client-env.yml"
+      - "scripts/verify-production-env.mjs"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verificar variáveis e integridade JWT sem expor segredos
+    if: github.repository == '1993dwsf-dev/barber-os' && github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: convex-primeiro-cliente
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - name: Verificar valores de controle e par de chaves criptográficas
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_FIRST_CLIENT_DEPLOY_KEY }}
+        run: node scripts/verify-production-env.mjs
