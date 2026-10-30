@@ -15,7 +15,13 @@ function convex(args, input) {
   });
   if (result.status !== 0) {
     // Output may contain secrets. Do not print stderr or stdout.
-    throw new Error('Comando Convex não concluído (' + args[0] + '). Verifique permissões da chave.');
+    const diagnostic = (result.stderr || '').toLowerCase();
+    const reason = /permission|forbidden|unauthori[sz]ed|access denied|not allowed|403|401/.test(diagnostic)
+      ? 'PERMISSION_DENIED'
+      : /unknown option|unknown command|invalid argument|unrecognized/.test(diagnostic)
+        ? 'CLI_ARGUMENT_REJECTED'
+        : 'CLI_ERROR_UNCLASSIFIED';
+    throw new Error('Convex ' + args.slice(0, 3).join(' ') + ' falhou: ' + reason + ' (sem exibir detalhes sensíveis).');
   }
   return result.stdout || '';
 }
