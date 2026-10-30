@@ -61,7 +61,7 @@ if (!hasPrivate) {
 } else console.log('Preservado: par JWT_PRIVATE_KEY/JWKS');
 if (!old.has('BARBER_MANUAL_INBOX_SECRET')) {
   const secret = randomBytes(32).toString('hex');
-  convex(['env', 'set', '--prod', 'BARBER_MANUAL_INBOX_SECRET'], secret + '\\n');
+  convex(['env', 'set', '--prod', 'BARBER_MANUAL_INBOX_SECRET'], secret + '\n');
   console.log('Criado: segredo interno para entrega manual de códigos (valor oculto)');
 } else console.log('Preservado: segredo interno para entrega manual de códigos');
 const after = names();
