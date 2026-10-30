@@ -14,6 +14,7 @@ export type CommercialEnv = {
   RESEND_API_KEY?: string;
   RESEND_FROM_EMAIL?: string;
   BARBER_EMAIL_PROVIDER?: string;
+  BARBER_MANUAL_INBOX_SECRET?: string;
   BREVO_API_KEY?: string;
   BREVO_FROM_EMAIL?: string;
   SITE_URL?: string;
@@ -115,8 +116,9 @@ export function evaluateCommercialConfig(env: CommercialEnv) {
     },
     {
       id: "email-delivery",
-      passed: supportedProvider && (provider === "manual" ||
-        (!!selectedKey?.trim() && senderCandidate)),
+      passed: supportedProvider && ((provider === "manual" && !!env.BARBER_MANUAL_INBOX_SECRET &&
+        env.BARBER_MANUAL_INBOX_SECRET.length >= 32 && env.BARBER_MANUAL_INBOX_SECRET.length <= 255) ||
+        (provider !== "manual" && !!selectedKey?.trim() && senderCandidate)),
       description: "Códigos: entrega privada pelo operador ou provedor de e-mail configurado (QA obrigatório).",
     },
     {
